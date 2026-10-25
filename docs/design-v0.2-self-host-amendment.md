@@ -2,6 +2,7 @@
 
 > Status: approved scope direction (owner, 2026-10-25); amends `docs/DESIGN.md` v0.1.
 > Cuts live in `docs/BACKLOG.md`. Authored by Claude (design authority), reviewed by chrono.
+> Owner update 2026-10-25: client scope is **Linux only** — Windows and macOS moved to BACKLOG #11/#12. Owner backlog addition: DNS domain blocklists (HaGeZi-style) as BACKLOG #13, gated on an RFC narrowing the §1.4 SWG non-goal.
 
 ## Header and §0
 
@@ -17,9 +18,9 @@ Retitle the section to **"What v1.0 must do"**. The ZPA comparison stays in §1.
 2. **Dark edges.** *(unchanged)*
 3. **Identity-centric policy.** One or more **OIDC** IdPs, with groups and attributes taken from ID-token/userinfo claims (JIT). Deprovisioning works through admin disable and the periodic IdP re-check (§4.2). Ordered allow/deny rules over users, groups, attributes, segments, posture, client type, network location and time. Timeout and re-auth policies.
 4. **App segments and connector groups with LB and failover.** *(unchanged)*
-5. **Clients** for Windows, macOS and Linux (GA). **Ordered edge failover** (primary + standby, plus private-edge preference), transparent roaming, TCP fallback. Distributed unsigned, with published checksums and provenance.
+5. **Client** for Linux (GA; Windows and macOS are BACKLOG #11/#12). **Ordered edge failover** (primary + standby, plus private-edge preference), transparent roaming, TCP fallback. Distributed unsigned, with published checksums and provenance.
 6. **Double encryption, on by default.** *(unchanged)*
-7. **Device posture v1** (§4.3 facts, including EDR *process presence*). **Device certificates are required by default.** Device keys are hardware-bound where the platform allows it without vendor signing (TPM on Windows/Linux). Elsewhere a software key is used and flagged in posture.
+7. **Device posture v1** (§4.3 facts, including EDR *process presence*). **Device certificates are required by default.** Device keys are hardware-bound where the platform allows it without vendor signing (TPM 2.0 on Linux). Elsewhere a software key is used and flagged in posture.
 8. **App discovery.** *(unchanged)*
 9. **Browser access.** *(unchanged)*
 10. **Privileged remote access (SSH only):** SSH in the browser, credential injection via a built-in **SSH user CA**, and session recording.
@@ -41,13 +42,13 @@ Retitle the section to **"What v1.0 must do"**. The ZPA comparison stays in §1.
 
 - **§2.1 diagram:** remove "SCIM server" and "RDP (WASM)", and change `/scim` on the public listener to `/login, /enroll`.
 - **§2.2 Control plane:** replace "OIDC RP and SAML SP" with "OIDC RP". Delete the SCIM bullet. Add: "SSH user CA (signs short-lived certs for PRA)."
-- **§2.2 Client shells:** "Windows, macOS, Linux: Tauri v2 tray UI over the privileged daemon. On macOS the daemon is a root launchd service using `utun` and `/etc/resolver/<suffix>`, not a Network Extension." Delete iOS/Android/uniffi.
+- **§2.2 Client shells:** "Linux: Tauri v2 tray UI over the privileged daemon." Delete Windows/macOS/iOS/Android/uniffi mentions; those platforms are BACKLOG #11/#12/#3.
 - **§2.2 Gateway:** the PRA portal is "SSH through russh to xterm.js". Delete RDP.
 - **§2.4 table:** the control `public` row becomes "Login and enrollment only". The public attack surface shrinks.
 
 ## §3 Wire protocol & crypto
 
-- **§3.3 device leaf:** key location becomes "TPM 2.0 (Windows/Linux); software key elsewhere, flagged `hw_key=false`". Delete "plus a platform attestation where available, phase 3" and the Android/`ASWebAuthenticationSession` mentions.
+- **§3.3 device leaf:** key location becomes "TPM 2.0 (Linux); software key elsewhere, flagged `hw_key=false`". Delete "plus a platform attestation where available, phase 3" and the Android/`ASWebAuthenticationSession` mentions.
 - **§3.6:** the `openssl` ban in cargo-deny becomes **absolute** (there is no longer an xmlsec exception). The FIPS bullet becomes "FIPS: backlog. aws-lc-rs keeps the option open."
 
 ## §4 Identity & policy
@@ -70,7 +71,7 @@ Retitle the section to **"What v1.0 must do"**. The ZPA comparison stays in §1.
 
 ## §5 Crates and layout
 
-- **Remove:** `zoopa-scim`, `zoopa-operator`, the `ironrdp` and `samael` dependencies, `clients/apple`, `clients/android`, and the Terraform repo note.
+- **Remove:** `zoopa-scim`, `zoopa-operator`, the `ironrdp` and `samael` dependencies, `clients/windows`, `clients/apple`, `clients/android`, and the Terraform repo note.
 - **`zoopa-pra`:** becomes "SSH proxying, SSH-CA injection, asciicast recording" (russh).
 - **§5.1:** drop the mobile runtime note. `zoopa-client-core` stays free of platform assumptions; this is cheap insurance for backlog #3.
 
@@ -79,7 +80,7 @@ Retitle the section to **"What v1.0 must do"**. The ZPA comparison stays in §1.
 - **§6.2 fuzz targets:** remove the SCIM filter/PATCH and SAML targets. Add an SSH-CA cert template target.
 - **§6.3 Releases:**
   - Replace "cosign keyless" with **"cosign with a project release key"**. This fixes an existing conflict with §10.5 ("pinned release key"), and it means air-gapped connectors can verify updates offline, with no dependency on Sigstore being reachable.
-  - Change "reproducible builds as a tracked goal" to "reproducible Linux binaries and images: required for 1.0. MSI/pkg: best effort."
+  - Change "reproducible builds as a tracked goal" to "reproducible Linux binaries and images: required for 1.0." (MSI/pkg packaging left 1.0 with BACKLOG #11/#12.)
   - Delete "An external audit is required before 1.0." Replace it with "Public spec review; the README carries the not-audited statement until an audit is funded (BACKLOG #9)."
 
 ## §7 Data plane
@@ -97,8 +98,6 @@ Retitle the section to **"What v1.0 must do"**. The ZPA comparison stays in §1.
 
 **Phase 1: "Small team can run it" (alpha)**
 - Features:
-  - Windows client (Wintun, TPM keys, unsigned MSI);
-  - macOS client (root `utun` daemon + `/etc/resolver`, software key; spike first);
   - TCP/443 h2 fallback, proxy support;
   - UDP flows;
   - **primary/standby edge failover and drain**. *Simpler: no geo racing and no edge registry.*
@@ -111,6 +110,7 @@ Retitle the section to **"What v1.0 must do"**. The ZPA comparison stays in §1.
   - Log Receivers v1;
   - Helm chart (connector as StatefulSet with persisted identity);
   - deb/rpm packages.
+  - *Simpler: no desktop clients beyond Linux (Windows/macOS are BACKLOG #11/#12) — the Wintun and utun spikes are gone from the critical path.*
 - **Exit criteria:**
   - 30 days of dogfooding on the project's own infrastructure;
   - chaos suite passes the §2.3 invariants;
@@ -151,7 +151,7 @@ Retitle the section to **"What v1.0 must do"**. The ZPA comparison stays in §1.
   - SECURITY.md process exercised (tabletop);
   - all spec-review findings rated high or above fixed;
   - the not-audited statement published.
-- **Highest-risk item** moves from RDP recording to **the macOS client without a Network Extension** (phase 1). Contingency: macOS ships as beta at 1.0. Do not reintroduce an NE variant without an Apple account.
+- **Highest-risk item:** with only a Linux client, no client-platform item remains on the critical path. The phase-0 protocol spikes (quinn DCID control, smoltcp throughput) stay the project's top technical risk; at phase 3 the watch item is meeting the §7.10 performance targets.
 
 **Post-1.0:** see `docs/BACKLOG.md`.
 
@@ -169,7 +169,7 @@ Retitle the section to **"What v1.0 must do"**. The ZPA comparison stays in §1.
 
 - **§10.1:** the connector ships as a static binary, deb/rpm, container image and Helm chart (the operator is removed).
 - **§10.2 Kubernetes:** "Connectors via the Helm chart as a StatefulSet (identity key on a small PVC)." Standard topology: "a primary and a standby edge, plus private edges on-prem".
-- **§10.5 Clients:** distribution through the operator's own tooling (MDM/Intune/Jamf, deb/rpm repos, MSI). Delete app stores and the notarised pkg. Minimum-version enforcement through the `client_version` posture fact matters more now, because there is no store auto-update.
+- **§10.5 Clients:** distribution through the operator's own deb/rpm repos (Linux is the only client platform; Windows/macOS tooling returns with BACKLOG #11/#12). Delete app stores and the notarised pkg. Minimum-version enforcement through the `client_version` posture fact matters more now, because there is no store auto-update.
 - **§10.6:** delete "recordings… lifecycle"? No: keep it. Add the SSH CA key to the KEK-protected set.
 - **§10.7 sizing:**
   - ≤ 500 users: 1 edge (+1 standby).
@@ -189,23 +189,25 @@ Retitle the section to **"What v1.0 must do"**. The ZPA comparison stays in §1.
 | 7 Double encryption default on | **Open**, unchanged |
 | 8 Distribution accounts | **Resolved by cut** (BACKLOG #9). Remaining consequence: see new #10 |
 | 9 Phase-0 spikes | **Open**, unchanged |
-| **10 (new)** macOS client shape | Accept a root `utun` daemon with a software device key and Gatekeeper friction for unsigned downloads. The alternative is funding an Apple account (which brings the NE client back). Phase-1 spike decides feasibility |
+| **10** macOS client shape | **Resolved by cut** (owner, 2026-10-25): macOS is BACKLOG #12, so the utun-vs-NE question is moot until it returns |
 | **11 (new)** IdP re-check on IdP outage | Accept "fail open until `reauth_by`" as the default, with fail-closed as an option |
 | **12 (new)** Vault → SSH CA | Accept dropping the credential vault in favour of an SSH user CA plus `user_supplied` mode |
+| **13 (new)** Client scope | **Resolved** (owner, 2026-10-25): Linux only for 1.0; Windows is BACKLOG #11, macOS #12, mobile #3 |
 
 ## Knock-on effects (checked, decision + reason)
 
 1. **§4 identity without SCIM/SAML.** It changes. Revocation needs the IdP re-check because, without SCIM, a user disabled at the IdP would otherwise keep silent refresh until `reauth_by`, which can be hours.
 2. **Groups from claims only.** It changes. Two additions: (a) unseen-group rule authoring, because the groups table fills lazily; (b) Entra overage documentation, because tokens carry at most ~200 groups.
 3. **§1.2 item 5 wording.** It changes. Mobile goes, and "nearest-edge selection" becomes "ordered edge failover", or the bar would promise cut features.
-4. **Apple account cut hits macOS, not just iOS.** It changes, and this is the hidden cost. A Network Extension system extension won't load without a Developer ID. Secure Enclave keys are also expected to need entitlements; verify that in the spike. So macOS becomes a `utun` daemon with a software key (new decision #10).
-5. **Windows unsigned.** No design change. Wintun is signed upstream and TPM/CNG works unsigned. The cost is SmartScreen and WDAC friction, so document re-signing with the organisation's own certificate.
+4. **Apple account cut hits macOS, not just iOS.** *Superseded (owner, 2026-10-25): the whole macOS client is BACKLOG #12, so there is no utun-vs-NE choice to make until it returns.*
+5. **Windows unsigned.** *Superseded (owner, 2026-10-25): the Windows client is BACKLOG #11. The re-signing documentation note applies when it returns.*
 6. **SSH-only PRA and the vault.** The vault is no longer justified. SSH certificates remove stored secrets entirely, and `user_supplied` covers appliances. The gateway role is still justified by browser access (phase 2).
 7. **When PRA SSH lands.** It moves earlier, to phase 2. It reuses the gateway, delegated tokens and the KEK, all built in phase 2, and phase 3 has nothing else it depends on.
 8. **§7 edge discovery without nearest-edge.** No DNS-based discovery. The edge list stays in the signed steering config, because DNS answers are unsigned and edge identity is verified via SPIFFE anyway. Operators may still use DNS names in the list to re-home IPs during DR (as §10.6 already says).
 9. **Removing hash-chaining.** Acceptable only because off-box streaming exists. The docs must make streaming the recommended default.
 10. **cosign keyless vs. pinned key.** It changes: use a project key. "Verifiable builds" and air-gapped auto-update both need offline verification, and §6.3 and §10.5 contradicted each other.
 11. **Helm instead of the operator.** It changes. The connector needs a persisted identity (StatefulSet + PVC). A pod restart must not re-enroll on a consumed provisioning key.
+12. **Domain blocklists vs the SWG non-goal.** Owner-requested (BACKLOG #13). It collides with the §1.4 "Secure Web Gateway / URL filtering: permanent non-goal" line, so it cannot be built until an RFC narrows that non-goal to exclude DNS-name blocking from user-supplied feeds. Kept out of 1.0 either way.
 
 ## What self-hosting still makes hard (state this in `docs/ops/`)
 
@@ -213,12 +215,12 @@ Retitle the section to **"What v1.0 must do"**. The ZPA comparison stays in §1.
   - The gateway needs public certificates per app origin. Wildcards mean DNS-01 credentials live on an internet-facing gateway.
   - The offline-root ceremony and yearly intermediate rotation are the operator's job.
   - **Static stability is bounded by leaf lifetime.** Infra leafs are 24 h and renew at 50%, so a control-plane outage longer than about 12–24 h becomes a data-plane outage. Alert on cert seconds-to-expiry.
-- **Upgrades:** skew policy is N-1 minor on an 8-week cadence, so operators must upgrade roughly every 16 weeks or do stepwise upgrades. Unsigned desktop clients have no store auto-update; client rollout is the operator's MDM/package job.
+- **Upgrades:** skew policy is N-1 minor on an 8-week cadence, so operators must upgrade roughly every 16 weeks or do stepwise upgrades. The Linux client has no store auto-update; rollout is the operator's deb/rpm repo job.
 - **Backup/KEK:** Postgres PITR is useless without the separately backed-up KEK. Losing the KEK means a new intermediate and re-enrolling every device, connector and edge. The SSH CA and recordings depend on the same KEK.
 - **IdP availability:** new logins, enrollments and re-auth fail closed while the IdP is down. Break-glass WebAuthn admins are mandatory, not optional.
 - **Postgres HA** (Patroni/CNPG) is real operational skill. The all-in-one compose is single-node.
 - **Internet-facing edges and gateway:** patching cadence, DDoS and abuse handling are on the operator. There is no vendor PoP to hide behind.
 - **Assurance:** with no third-party audit, the operator is trusting public spec review plus reproducible builds, and should treat the project accordingly.
 
-Skipped/Not checked: I didn't read §3.1–3.2, §3.4–3.5, §3.7, §6.1–6.2 or §9.1–9.2 closely (I grepped them for terms related to the cuts); I didn't verify current Apple entitlement rules for Secure Enclave keys or `utun` access from unsigned binaries.
-Risk: the macOS client without a Network Extension is unproven. If the phase-1 spike fails, macOS drops from GA, or the Apple account (BACKLOG #9) has to come back.
+Skipped/Not checked: §3.1–3.2, §3.4–3.5, §3.7, §6.1–6.2 and §9.1–9.2 were only grepped for cut-related terms, not re-read closely; the blocklist RFC (BACKLOG #13) does not exist yet.
+Risk: Linux-only clients narrow who can dogfood phase 1; if chrono's own endpoints include Windows/macOS, BACKLOG #11/#12 will need to come back before the 30-day dogfood exit criterion is meaningful.
