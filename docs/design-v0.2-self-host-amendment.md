@@ -180,8 +180,8 @@ Retitle the section to **"What v1.0 must do"**. The ZPA comparison stays in §1.
 
 | # | Status |
 |---|---|
-| 1 Licensing | **Open**, unchanged. Still blocks the public repo |
-| 2 Name/trademark | **Open.** Self-hosting doesn't remove it: the public repo and releases still use the name |
+| 1 Licensing | **Resolved** (owner, 2026-10-26): adopt DESIGN §5.4's split — AGPL-3.0-only server roles/crates, Apache-2.0 endpoint/protocol/library code, DCO, no CLA. See `LICENSING.md` |
+| 2 Name/trademark | **Open.** The repo is already public; get a legal sanity check before releases or broader promotion |
 | 3 1.0 scope (mobile, RDP) | **Resolved by cut** (BACKLOG #3, #5) |
 | 4 SAML library risk | **Resolved by cut** (BACKLOG #1). The xmlsec C dependency is gone and the openssl ban is now absolute |
 | 5 Postgres-only | **Confirmed** by this amendment |

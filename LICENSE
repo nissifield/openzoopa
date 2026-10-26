@@ -1,0 +1,6 @@
+openzoopa is split-licensed.
+
+Server-side roles and crates are licensed under AGPL-3.0-only; see LICENSE-AGPL.
+Client, connector, protocol, library, CLI, and endpoint-side code is licensed under Apache-2.0; see LICENSE-APACHE.
+
+See LICENSING.md for the crate mapping and contribution terms.

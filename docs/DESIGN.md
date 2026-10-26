@@ -607,7 +607,7 @@ Ties are broken by the narrower port range, then by segment ID. Overlaps are fla
 | AGPL-3.0 for everything | Strongest protection against closed SaaS forks | Many enterprise legal teams ban AGPL **on endpoints**, which is exactly where security review is hardest. It also blocks embedding the client in other products. |
 | **Split: AGPL server, Apache endpoint/protocol** | Endpoints, connectors, protocol and libraries stay permissive (easy security approval, embeddable, and alternative implementations remain possible). Server roles, where the "host it as SaaS" risk sits, are protected. Precedent: NetBird moved its server components to AGPLv3 in 2025 while keeping clients permissive. | Two licenses to explain. Permissive crates must never depend on AGPL crates. |
 
-**Recommendation: the split.**
+**Decision (owner, 2026-10-26): the split.**
 - **AGPL-3.0-only** for `zoopa-server` and its server-role crates.
 - **Apache-2.0** (patent grant included; no MIT dual license, since there is no GPLv2 consumer to satisfy) for everything else.
 - An `xtask license-boundary` CI check fails if an Apache crate depends on an AGPL crate.
@@ -1153,8 +1153,8 @@ These are design targets enforced by nightly benchmarks. They are not marketing 
 
 ## 11. Decisions requested from the owner
 
-1. **Licensing:** approve the AGPL-server / Apache-endpoint split with DCO and **no CLA**. This rules out a future dual-license business. If that model might be wanted, decide now and adopt a CLA instead.
-2. **Name and trademark:** get a legal sanity check of "openzoopa" against Zscaler's "ZPA" mark before the repo goes public.
+1. **Licensing:** resolved by the owner (2026-10-26): AGPL-3.0-only server / Apache-2.0 endpoint split with DCO and **no CLA**. This rules out a future dual-license business.
+2. **Name and trademark:** the repository is already public; get a legal sanity check of "openzoopa" against Zscaler's "ZPA" mark before releases or broader promotion.
 3. **Scope of 1.0:** confirm that **mobile GA** and **RDP via browser** are 1.0 requirements, with RDP *recording* allowed to slip to beta as the contingency.
 4. **SAML library risk:** accept samael + xmlsec (C dependency, isolated behind a feature) as the SAML path, with an IdP bridge as the documented fallback.
 5. **Postgres-only:** confirm there will be no SQLite and no embedded Raft.
