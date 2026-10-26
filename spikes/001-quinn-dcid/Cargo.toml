@@ -1,0 +1,15 @@
+# Throwaway phase-0 spike. Standalone on purpose: empty [workspace] keeps it out of any root workspace.
+[workspace]
+
+[package]
+name = "spike-quinn-dcid"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+quinn = { version = "=0.11.12", default-features = false, features = ["runtime-tokio", "rustls-aws-lc-rs"] }
+quinn-proto = { version = "=0.11.19", default-features = false }
+rustls = { version = "0.23", default-features = false, features = ["std", "aws-lc-rs", "prefer-post-quantum"] }
+rcgen = { version = "0.13", default-features = false, features = ["aws_lc_rs", "pem"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time"] }
