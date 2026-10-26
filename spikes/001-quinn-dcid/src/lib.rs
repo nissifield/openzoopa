@@ -176,10 +176,12 @@ impl AsyncUdpSocket for FilterSocket {
     }
 
     fn try_send(&self, t: &Transmit) -> io::Result<()> {
-        // load-then-sub is NOT race-free in general (endpoint and connection driver tasks both
-        // call try_send); sound here only because every spike test runs on a current-thread runtime
-        if self.drop_next_sends.load(Ordering::SeqCst) > 0 {
-            self.drop_next_sends.fetch_sub(1, Ordering::SeqCst);
+        // atomic conditional decrement: concurrent try_send callers cannot both swallow one token
+        if self
+            .drop_next_sends
+            .try_update(Ordering::SeqCst, Ordering::SeqCst, |n| n.checked_sub(1))
+            .is_ok()
+        {
             return Ok(());
         }
         self.inner.try_send(t)?;
@@ -318,6 +320,27 @@ pub fn client_config(cert: &CertificateDer<'static>, dcid: [u8; 20]) -> quinn::C
     let mut cc = quinn::ClientConfig::new(Arc::new(
         QuicClientConfig::try_from(rustls_client(cert)).unwrap(),
     ));
+    cc.initial_dst_cid_provider(Arc::new(move || ConnectionId::new(&dcid)));
+    cc
+}
+
+/// Client config offering ONLY X25519MLKEM768: a completed handshake proves that group was
+/// negotiated (quinn exposes no stable API to read it back).
+pub fn client_config_mlkem_only(
+    cert: &CertificateDer<'static>,
+    dcid: [u8; 20],
+) -> quinn::ClientConfig {
+    let mut provider = rustls::crypto::aws_lc_rs::default_provider();
+    provider.kx_groups = vec![rustls::crypto::aws_lc_rs::kx_group::X25519MLKEM768];
+    let mut roots = rustls::RootCertStore::empty();
+    roots.add(cert.clone()).unwrap();
+    let mut tls = rustls::ClientConfig::builder_with_provider(Arc::new(provider))
+        .with_protocol_versions(&[&TLS13])
+        .unwrap()
+        .with_root_certificates(roots)
+        .with_no_client_auth();
+    tls.alpn_protocols = vec![ALPN.to_vec()];
+    let mut cc = quinn::ClientConfig::new(Arc::new(QuicClientConfig::try_from(tls).unwrap()));
     cc.initial_dst_cid_provider(Arc::new(move || ConnectionId::new(&dcid)));
     cc
 }

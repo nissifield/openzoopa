@@ -147,10 +147,17 @@ impl Edge {
 
 /// Connect with a synthetic-DCID client, echo "ping". Err = handshake did not complete in `wait`.
 async fn client_roundtrip(e: &Edge, wait: Duration) -> Result<Vec<u8>, String> {
+    client_roundtrip_cfg(e, client_config(&e.cert, SYNTHETIC_DCID), wait).await
+}
+
+/// Same, with a caller-supplied client config.
+async fn client_roundtrip_cfg(
+    e: &Edge,
+    cfg: quinn::ClientConfig,
+    wait: Duration,
+) -> Result<Vec<u8>, String> {
     let ep = Endpoint::client("127.0.0.1:0".parse().unwrap()).unwrap();
-    let c = ep
-        .connect_with(client_config(&e.cert, SYNTHETIC_DCID), e.addr, "localhost")
-        .unwrap();
+    let c = ep.connect_with(cfg, e.addr, "localhost").unwrap();
     let conn = timeout(wait, c)
         .await
         .map_err(|_| "handshake timed out".to_string())?
@@ -254,6 +261,26 @@ async fn control_unfiltered_server_answers_probes() {
         rst.iter().map(Vec::len).collect::<Vec<_>>()
     );
     assert_eq!(rst.len(), 1, "unfiltered quinn must send a stateless reset");
+
+    // 7-byte DCID is below RFC 9000's 8-byte minimum for client-chosen Initial DCIDs; unfiltered
+    // quinn answers with CONNECTION_CLOSE(PROTOCOL_VIOLATION) (quinn-proto 0.11.19
+    // endpoint.rs:706-723 -> initial_close), so the filtered server's silence on this probe is
+    // the filter, not quinn.
+    let (_, bad) = probe(e.addr, long_pkt(0xC0, 1, &[0x11u8; 7], 1200, 3), QUIET).await;
+    println!(
+        "control short-DCID Initial: {} response(s), lens {:?}",
+        bad.len(),
+        bad.iter().map(Vec::len).collect::<Vec<_>>()
+    );
+    assert_eq!(
+        bad.len(),
+        1,
+        "unfiltered quinn must answer a sub-8-byte-DCID Initial"
+    );
+    assert!(
+        bad[0][0] & 0x80 != 0 && bad[0][1..5] == [0, 0, 0, 1],
+        "expected a v1 long-header (CONNECTION_CLOSE) response"
+    );
 }
 
 const SERVER_CID_PREFIX_ARR: &[u8; 16] = b"SYNSRVID\0\0\0\0\0\0\0\0";
@@ -290,8 +317,8 @@ async fn filtered_server_is_silent() {
             long_pkt(0xC0, 1, &SYNTHETIC_DCID, 600, 15),
         ),
         (
-            "v1 Initial, wrong-length DCID (8B)",
-            long_pkt(0xC0, 1, &[0x11u8; 8], 1200, 16),
+            "v1 Initial, wrong-length DCID (7B, below RFC 9000 min 8B)",
+            long_pkt(0xC0, 1, &[0x11u8; 7], 1200, 16),
         ),
     ];
     let mut tasks = vec![];
@@ -352,6 +379,11 @@ async fn handshake_binding_mode() {
     assert_eq!(o, vec![SYNTHETIC_DCID.to_vec()]);
     let (a, b) = e.stats(|s| s.sent.values().fold((0, 0), |a, v| (a.0 + v.0, a.1 + v.1)));
     println!("server sent {a} datagram(s) / {b} bytes, all to the bound client");
+    assert_eq!(
+        e.stats(|s| s.sent.len()),
+        1,
+        "all server datagrams must go to a single destination (the bound client)"
+    );
 }
 
 /// Test 4b: with NO loss, "drop exact replays" does NOT break the handshake: the server's ACK of the
@@ -391,6 +423,14 @@ async fn retransmission_after_lost_server_reply() {
         let (seen, acc) = e.stats(|s| (s.token_seen, s.token_accepted));
         println!("{mode:?}/first server reply lost: result={r:?} elapsed={:?} token_dcid_seen={seen} accepted={acc}", t0.elapsed());
         assert_eq!(r.is_ok(), expect_ok, "{mode:?}");
+        assert_eq!(
+            e.fs.as_ref()
+                .unwrap()
+                .drop_next_sends
+                .load(std::sync::atomic::Ordering::SeqCst),
+            0,
+            "{mode:?}: injected drop was never consumed"
+        );
         assert!(
             seen >= 3,
             "no token retransmission happened: hypothesis not exercised"
@@ -398,6 +438,8 @@ async fn retransmission_after_lost_server_reply() {
         if expect_ok {
             assert_eq!(acc, seen);
         } else {
+            // must be the test's own timeout, not quinn's idle timeout
+            assert_eq!(r, Err("handshake timed out".to_string()));
             assert_eq!(acc, 1);
             // the swallowed try_send is not counted, so a zero send counter proves the
             // endpoint never answers again, from the counter rather than inference
@@ -413,6 +455,7 @@ async fn token_replay_from_other_address_is_silent() {
     let e = edge(Some(Mode::Binding));
     client_roundtrip(&e, T).await.expect("handshake");
     let seen0 = e.stats(|s| s.token_seen);
+    let acc0 = e.stats(|s| s.token_accepted);
     let (paddr, got) = probe(e.addr, captured[0].clone(), QUIET).await;
     println!(
         "replayed captured Initial from {paddr}: responses={}",
@@ -421,6 +464,14 @@ async fn token_replay_from_other_address_is_silent() {
     assert!(got.is_empty());
     assert_eq!(e.stats(|s| s.sent_to(paddr)), (0, 0));
     assert_eq!(e.stats(|s| s.token_seen), seen0 + 1);
+    assert_eq!(
+        e.stats(|s| s.token_accepted),
+        acc0,
+        "replay must be rejected, not just unanswered"
+    );
+    let o = e.orig_dcids.lock().unwrap();
+    assert_eq!(o.len(), 1, "replay must not create a second Incoming");
+    assert_eq!(o[0], SYNTHETIC_DCID.to_vec());
 }
 
 /// Extra: junk flood before a valid handshake does not stall (no Ok(0), no starvation).
@@ -495,4 +546,15 @@ fn rustls_prefers_x25519mlkem768() {
     let g = c.negotiated_key_exchange_group().map(|g| g.name());
     println!("negotiated group = {g:?}, first client flight = {ch_len} bytes (> ~1160 usable per Initial)");
     assert_eq!(g, Some(NamedGroup::X25519MLKEM768));
+}
+
+/// Group check, strong form: the client offers ONLY X25519MLKEM768, so completing a real quinn
+/// handshake through the filter proves that group was negotiated.
+#[tokio::test]
+async fn mlkem_only_client_completes_handshake_through_filter() {
+    let e = edge(Some(Mode::Binding));
+    let r = client_roundtrip_cfg(&e, client_config_mlkem_only(&e.cert, SYNTHETIC_DCID), T)
+        .await
+        .expect("MLKEM-only handshake must complete (no common group would fail)");
+    assert_eq!(r, b"ping");
 }

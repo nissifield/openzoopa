@@ -6,7 +6,7 @@
 
 Only the `initial_dst_cid_provider` API claim was checked first-hand (on docs.rs). Everything else below relies on upstream source fetches; line numbers marked `~` are approximate. Where a line range is exact (`:NNN-MMM`), it was verified against the local cargo registry copy of quinn-proto 0.11.19 during the spike review.
 
-**Versions:** quinn 0.11.12 and quinn-proto 0.11.19 are the latest releases. quinn-rs/quinn `main` is quinn-proto 0.12.0, unreleased. There is no `Cargo.lock` in the repo yet.
+**Versions:** quinn 0.11.12 and quinn-proto 0.11.19 are the latest releases. quinn-rs/quinn `main` is quinn-proto 0.12.0, unreleased. The spike pins exact versions via `spikes/001-quinn-dcid/Cargo.lock`.
 
 ## The aspects you listed
 
@@ -34,7 +34,7 @@ Only the `initial_dst_cid_provider` API claim was checked first-hand (on docs.rs
    - Server CIDs travel in the clear, and the filter must accept them on Initials (see the Server-issued CIDs row).
    - So an on-path observer can copy one into a fresh Initial and reach quinn without K_spa.
    - **Fix:** in the edge accept loop, call `Incoming::ignore()` unless `spa_verify(incoming.orig_dst_cid())` passes. Never call `refuse()`, because it sends bytes.
-   - Even with that fix, A2 still reaches quinn's Initial decoding and Retry-token decryption. The §3.4 wording needs an amendment to say darkness is guaranteed against A1, and against A2 is reduced to that pre-auth surface.
+   - Even with that fix, A2 still reaches quinn's Initial decoding and Retry-token decryption. The §3.4 wording needs an amendment to say darkness is targeted at A1 (off-path) — not proven as a guarantee; against A2 it is reduced to that pre-auth surface.
 
 3. **No other conflicts.**
    - RFC 9001 §5.2 derives Initial keys from the token, which is fine: Initial protection isn't confidential anyway.
@@ -74,4 +74,4 @@ No. §11 #1 and #2 block the *public repo and releases* (amendment §11 table), 
 Keep it outside the product tree, with no license header, nothing published, and no "openzoopa" artifacts. Clean-room from public docs only; quinn and rustls are MIT/Apache, so there's no conflict. Nothing in it is assumed to carry over into AGPL or Apache crates.
 
 Skipped/Not checked: I checked only the `initial_dst_cid_provider` API myself; every other upstream claim comes from the agent's fetches, with approximate line numbers. Not checked by anyone: the exact RFC 9000 §10.3 "MAY" wording, what `poll_recv` does with `Ok(0)` or GRO batches, how quinn handles an undecodable NEW_TOKEN, whether rustls offers X25519MLKEM768 by default, and the anti-amplification spike.
-Risk: Until §3.4 is amended, the replay-cache rule breaks every PQ or lossy handshake and the "unreachable without K_spa" claim is false against an on-path observer. quinn 0.12 changes the `AsyncUdpSocket` API, so the filter wrapper will need a rewrite.
+Risk: Until §3.4 is amended, the replay-cache rule breaks any handshake in which the client must retransmit under the token DCID (a lost first server reply deadlocks it — demonstrated; clean handshakes complete, so "breaks every PQ handshake" is false), and the "unreachable without K_spa" claim is false against an on-path observer. quinn 0.12 changes the `AsyncUdpSocket` API, so the filter wrapper will need a rewrite.

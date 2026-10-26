@@ -1,7 +1,10 @@
 # Spike 001: quinn initial-DCID control + userspace UDP prefilter
 
 **Throwaway phase-0 feasibility spike. Not product code.** It answers DESIGN.md §3.4's "Phase-0 spike (blocking)" and
-`docs/research/phase0-quic-dcid-netsec.md`.
+`docs/research/phase0-quic-dcid-netsec.md`. It validates two things only: (a) the client can choose its Initial DCID with
+released quinn 0.11.12, and (b) the demonstrated synthetic filtering plumbing drops unauthenticated packets silently on
+loopback and passes valid traffic. The full DESIGN.md §3.4 mechanism is **NOT** validated end-to-end (PARTIAL; see
+Verdicts and Missing/unsupported).
 
 Scope disclaimers (read these first):
 
@@ -15,8 +18,9 @@ Scope disclaimers (read these first):
 
 - `src/lib.rs`: `FilterSocket` (a quinn `AsyncUdpSocket` wrapper), `SynthCidGen` (server `ConnectionIdGenerator`), `peek()`
   (bounds-checked header parser), fixtures.
-- `tests/dcid.rs`: 12 tests over loopback, every wait bounded: 9 `#[tokio::test]`, 3 plain `#[test]`
-  (`lock_resolves_exact_versions`, `peek_never_panics_on_truncation`, `rustls_prefers_x25519mlkem768`).
+- `tests/dcid.rs`: 13 tests over loopback, every wait bounded: 10 `#[tokio::test]`, 3 plain `#[test]`
+  (`lock_resolves_exact_versions`, `peek_never_panics_on_truncation`, `rustls_prefers_x25519mlkem768`). The new test in
+  this corrective pass is `mlkem_only_client_completes_handshake_through_filter`.
 - Set `SPIKE_TRACE=1` to print a line per datagram the filter sees.
 
 Filter rule (spike only): accept a v1 long header whose DCID is `SYNTHETIC_DCID` **and** is an Initial of >= 1200 bytes **and**
@@ -48,6 +52,8 @@ enabled, no Retry. The edge accept loop calls `Incoming::orig_dst_cid()`, then `
 
 ## Commands run (cwd = this directory) and exit codes
 
+Initial pass:
+
 | command | exit |
 |---|---|
 | `cargo generate-lockfile` | 0 |
@@ -57,11 +63,24 @@ enabled, no Retry. The edge accept loop calls `Incoming::orig_dst_cid()`, then `
 | `cargo test -- --nocapture --test-threads=1` | 0 (12 passed, 14.8 s) |
 | `cargo test` x5 (flake check, default threads) | 0, 0, 0, 0, 0 (12 passed each, ~6.5 s) |
 
+Corrective pass (tests/docs only, after two independent reviews):
+
+| command | exit |
+|---|---|
+| `cargo fmt --all` / `cargo fmt --all -- --check` | 0 / 0 |
+| `cargo clippy --all-targets -- -D warnings` | 0 (no warnings) |
+| `cargo test -- --nocapture --test-threads=1` | 0 (13 passed, ~16 s) |
+| `cargo test` (flake check, default threads) | 0 (13 passed, ~6.5 s) |
+| `git diff --check` | 0 |
+
 To reproduce from the repo root: `cargo test --manifest-path spikes/001-quinn-dcid/Cargo.toml -- --nocapture`.
 There is no `cargo run` target: the tests print every observation with `--nocapture`.
 
 Provenance: implemented by the `zoopa-builder` subagent (it ran, via the Agent tool) under chrono's approved takeover of
-Kimi task `e16c3acf`. The parent session then independently re-ran from the repo root:
+Kimi task `e16c3acf`. The corrective pass above (tests/docs only, race-free drop counter, 7-byte DCID control,
+MLKEM-only handshake test, strengthened replay/loss assertions) was likewise implemented by the `zoopa-builder`
+subagent under chrono-approved continuation; the parent session re-verified. The parent session then independently
+re-ran the initial pass from the repo root:
 
 | command | exit |
 |---|---|
@@ -92,26 +111,32 @@ captured 2 client datagram(s) before first retransmission
 Hex = ASCII `SYNTHETIC-NOT-A-KEY!`. Long header, version 1, Initial, DCID length 20, both datagrams padded to 1200.
 On the filtered server, `Incoming::orig_dst_cid()` = `53594e5448455449432d4e4f542d412d4b455921` (the token).
 
-**Key exchange.** quinn does not expose the negotiated group, so `rustls_prefers_x25519mlkem768` runs an in-memory rustls TLS 1.3
-handshake with the same config: `negotiated group = Some(X25519MLKEM768)`, first client flight 1458 bytes. This is
-corroborated on the wire: *this* ClientHello (~1458 B) spans **2 Initial datagrams** at 1200 B MTU/padding in every observed
-quinn handshake (not a universal constant; other ClientHellos may span more). Caveat: the group is not read
-from the quinn connection itself.
+**Key exchange.** quinn exposes no stable API for the negotiated group. The strong-form proof is
+`mlkem_only_client_completes_handshake_through_filter`: the client's `CryptoProvider.kx_groups` is restricted to
+X25519MLKEM768 only, and it completes a real quinn handshake through the filter — a completed handshake with a single
+offered group proves that group by construction. Corroboration: `rustls_prefers_x25519mlkem768` runs an in-memory rustls
+TLS 1.3 handshake with the same config: `negotiated group = Some(X25519MLKEM768)`, first client flight 1458 bytes. This is
+also corroborated on the wire: *this* ClientHello (~1458 B) spans **2 Initial datagrams** at 1200 B MTU/padding in every
+observed quinn handshake (not a universal constant; other ClientHellos may span more).
 
 **(b) Zero response.** Probes from raw sockets to the filtered server (window 1.5 s each, `Binding` mode):
 
-| probe | bytes received | server send counter for prober |
-|---|---|---|
-| v1 Initial-looking, random 20 B DCID, 1200 B | 0 | 0 |
-| unknown version 0x1a2a3a4a, 1200 B | 0 | 0 |
-| truncated long header (3 B) | 0 | 0 |
-| long header, DCID len 255 beyond buffer | 0 | 0 |
-| empty datagram | 0 | 0 (see note) |
-| 1200 B short header, random 16 B CID | 0 | 0 |
-| token DCID but Handshake type | 0 | 0 |
-| token DCID Initial < 1200 B | 0 | 0 |
-| v1 Initial, 8 B DCID | 0 | 0 |
-| captured valid Initial replayed from another source addr after binding | 0 | 0 |
+| probe | bytes received | server send counter for prober | control? |
+|---|---|---|---|
+| v1 Initial-looking, random 20 B DCID, 1200 B | 0 | 0 | no |
+| unknown version 0x1a2a3a4a, 1200 B | 0 | 0 | yes |
+| truncated long header (3 B) | 0 | 0 | no |
+| long header, DCID len 255 beyond buffer | 0 | 0 | no |
+| empty datagram | 0 | 0 (see note) | no |
+| 1200 B short header, random 16 B CID | 0 | 0 | yes |
+| token DCID but Handshake type | 0 | 0 | no |
+| token DCID Initial < 1200 B | 0 | 0 | no |
+| v1 Initial, wrong-length DCID (7 B, below RFC 9000 min 8 B) | 0 | 0 | yes |
+| captured valid Initial replayed from another source addr after binding | 0 | 0 | no |
+
+"control?" = an unfiltered control exists for this probe (below), so the filtered zero is attributable to the filter.
+Replay row, strengthened evidence: replay **rejected by the filter** — `token_accepted` unchanged, no second `Incoming`,
+0 responses, send counter 0.
 
 Total datagrams sent by the endpoint during the probe test: **0**; quinn never produced an `Incoming`; `dropped=8` (the empty
 datagram is skipped by the filter's own stride loop: `total == 0` never iterates, `w` stays 0, and the datagram is compacted
@@ -121,15 +146,22 @@ out, so it counts neither as dropped nor as accepted).
 
 ```
 control unknown-version probe: 1 response(s), lens [35]      (Version Negotiation: versions 0a1a2a3a, 00000001)
-control short-header, unknown CID: 1 response(s)             (stateless reset; 526-609 B across runs)
+control short-header, unknown CID: 1 response(s)             (stateless reset; 290 B this run, varies across runs)
+control short-DCID Initial: 1 response(s), lens [77]         (v1 long-header CONNECTION_CLOSE(PROTOCOL_VIOLATION))
 ```
+
+The short-DCID control: a v1 Initial with a 7-byte DCID is below RFC 9000's 8-byte minimum; unfiltered quinn-proto
+0.11.19 answers with exactly one v1 long-header CONNECTION_CLOSE(PROTOCOL_VIOLATION) — `early_validate_first_packet`
+(`endpoint.rs:706-723`) rejects it and `handle_first_packet` replies via `initial_close` (`:481-488`). The error code
+itself sits inside the encrypted Initial payload and is identified from source, not decrypted.
 
 Valid traffic: a real quinn client with the synthetic-DCID provider completes the handshake through the filtered server in
 `Binding` mode and echoes `ping` on a bidi stream (`binding: token_dcid_seen=2 accepted=2 server_cid_accepted=4`; server sent
 6 datagrams / 4141 bytes, all to the client). Junk flood: 100 junk v1 Initials, then a valid handshake completes in ~7 ms
-(`dropped=92` of 100 sent; the other 8 are unaccounted for, not investigated). The GRO stride-split/compaction code path was
-written, but no test forces a batch and whether GRO was active on this loopback (or any batch occurred at all) is **unknown /
-not measured** (see unsupported list).
+(`dropped=92` of 100 sent; the ~8 unaccounted junk datagrams are plausibly lost to kernel receive-buffer overflow — 100
+datagrams sent back-to-back faster than the endpoint drains them — plausible, not proven). The GRO stride-split/compaction
+code path was written, but no test forces a batch and whether GRO was active on this loopback (or any batch occurred at
+all) is **unknown / not measured** (see unsupported list).
 
 **Replay-cache hypothesis (research claim: "'drop exact replays' breaks every PQ handshake").**
 
@@ -141,10 +173,10 @@ not measured** (see unsupported list).
 Why the clean case completes under the naive rule: the server ACKs the first Initial, which hands the client the server's SCID.
 The client switches its DCID to the server CID and retransmits the dropped second Initial under it, and the filter accepts that
 by CID. The naive rule only breaks when the client has to keep retransmitting under the token DCID. In the loss arm the
-server's **only** reply to the first token Initial is an ACK-only Initial: it never sees the full 2-Initial ClientHello, so it
-never sends its handshake flight, and an ACK-only packet is never retransmitted. Losing/shedding it deadlocks the handshake:
-the client keeps retransmitting under the token DCID and the naive filter drops every retransmission (observed: zero datagrams
-sent after the loss).
+injected drop is consumed (asserted) and the endpoint send counter stays 0 (asserted) — one reply was attempted,
+swallowed, and nothing was sent after. That the swallowed reply was an ACK-only Initial (which is never retransmitted)
+is **INFERRED** from the deadlock plus the zero send counter, not directly observed. Losing/shedding it deadlocks the
+handshake: the client keeps retransmitting under the token DCID and the naive filter drops every retransmission.
 
 ## Verdicts
 
@@ -171,26 +203,35 @@ sent after the loss).
   quinn 0.11.19, only `min_reset_interval`.
 - **GRO batches**: the stride-split/compaction code path was written but no test forces a multi-segment batch. Whether GRO was
   active on this loopback was not checked. Unverified.
+- **`FilterSocket::poll_recv` self-wake branch**: the `wake_by_ref()` + `Poll::Pending` path after 64 all-dropped
+  iterations was never reached in any test run; whether it is reachable at all on this loopback setup is unknown.
 - **A2 server-CID copy into a fresh Initial**: not run. `Incoming::ignore()` gating is coded in the accept loop but never
   triggered by any test (no non-token `Incoming` ever arrived).
 - **Junk-flood robustness** beyond 100 datagrams; amplification limits; behaviour under real loss patterns; IPv6; multiple
   concurrent clients sharing one token.
 - **Coalesced packets**: only the first packet's DCID is inspected.
 - Real MAC'd tokens, `ts`/`nonce` window, `K_spa` epochs, `edge_id` binding: out of scope by design.
-- X25519MLKEM768 group read from the quinn connection (rustls in-memory proxy used instead).
+- X25519MLKEM768 group read back from the quinn connection API (no stable API exists); proven by construction instead via
+  `mlkem_only_client_completes_handshake_through_filter` (client offers only that group; handshake completes).
 
 ## Design consequences
 
-1. DESIGN.md §3.4's mechanism is **feasible with released quinn and no patch**. The §3.4 fallback ("carry a small patch") is
-   not needed for DCID control.
+1. The client-side pieces of §3.4 (choosing the Initial DCID, and the prefilter plumbing demonstrated here) are feasible
+   with released quinn and no patch. The §3.4 mechanism as a whole remains **PARTIAL/unverified** (Retry,
+   `validate()`-based reset suppression, closed-CID behaviour, A2) and may still require quinn work or design changes.
 2. A PQ ClientHello is ~1458 bytes and *this* one takes **2 client Initials** (both with the token DCID) at 1200 B
    MTU/padding — not a universal constant, but enough that any filter treating a token as single-use is fragile.
-3. Retransmissions use the token DCID until the client receives a server packet (RFC 9000 §7.2), so the filter must tolerate
-   repeats from the same client.
+3. Retransmissions use the token DCID until the client receives the server's first Initial or Retry packet (RFC 9000
+   §7.2: the client switches DCID on the first received Initial or Retry, not on any server packet), so the filter must
+   tolerate repeats from the same client.
 4. A first-sighting binding has a DoS hole the spike does not test: an on-path attacker who copies a token and sends it from
    another address first would bind it and starve the real client. Binding per token to a single address is therefore too
    weak against A2.
-5. Quinn exposes no group in its API, so a CI assertion on X25519MLKEM768 needs another route (rustls-level test or a patch).
+5. Quinn exposes no stable API for the negotiated key-exchange group. The cross-review referenced a cfg-gated internal
+   rustls `__rustls-post-quantum-test` field; no such field exists in pinned rustls 0.23.46 (crate source grepped), and
+   internal rustls test hooks would not be a stable API or reachable through quinn anyway. The proof route used instead:
+   restrict the client's `CryptoProvider.kx_groups` to X25519MLKEM768 only and complete a real quinn handshake
+   (`mlkem_only_client_completes_handshake_through_filter`).
 
 DESIGN.md §3.4 currently says: *"The edge keeps a replay cache of `(ts, nonce)` for a ±90 s window. Exact replays are dropped."*
 and the filter table accepts an Initial if *"DCID is a valid SPA token, or a valid server-issued CID"*. The first sentence
@@ -207,10 +248,14 @@ contradicts RFC 9000 §7.2 retransmission behaviour (demonstrated above: lost se
 
 > **Darkness claim.** Darkness (zero response, no quinn parsing) holds against off-path scanners and A1. Against an on-path
 > observer (A2), server CIDs are visible, so such an observer can reach quinn's Initial decoding. The edge accept loop MUST
-> call `Incoming::ignore()` (never `refuse()`) unless `orig_dst_cid()` verifies as an SPA token. Note that this gating is
-> **insufficient once Retry is enabled** (product-level, UNVERIFIED — source-only, never run in this spike): quinn-proto
-> 0.11.19 `handle_first_packet` (`src/endpoint.rs:512-525`) sends CONNECTION_CLOSE(INVALID_TOKEN) via `initial_close`
-> (`src/endpoint.rs:875`) when `IncomingToken::from_header` fails, before any `Incoming` exists, so no accept-loop gating can
-> suppress it.
+> call `Incoming::ignore()` (never `refuse()`) unless `orig_dst_cid()` verifies as an SPA token. Note that this gating does
+> not cover quinn's pre-`Incoming` responses (source-only, never run in this spike, except where marked): with Retry
+> enabled, `handle_first_packet` (`src/endpoint.rs:512-525`) sends CONNECTION_CLOSE(INVALID_TOKEN) via `initial_close`
+> (`src/endpoint.rs:875`) when `IncomingToken::from_header` fails, before any `Incoming` exists, so no accept-loop gating
+> can suppress it. Further pre-`Incoming` leaks: dropping an `Incoming` without calling `ignore()` triggers `refuse()`,
+> which sends CONNECTION_CLOSE; closing the endpoint makes it refuse new `Incoming`s; with no server config an Initial
+> elicits a stateless reset (`endpoint.rs:445-449`); and an Initial with a DCID shorter than 8 bytes gets
+> CONNECTION_CLOSE(PROTOCOL_VIOLATION) from `early_validate_first_packet` (`endpoint.rs:706-723`) — this last one
+> demonstrated by the new control probe above.
 
 Both paragraphs are PROPOSED only; the K and N values are placeholders from this spike, not measured.
