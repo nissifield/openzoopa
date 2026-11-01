@@ -13,7 +13,7 @@ The project is in phase 0. Most work is security-sensitive and done by the maint
 
 ## The card flow
 
-No cards are published yet; the first ones follow the CI gate (forthcoming).
+No cards are published yet.
 
 1. Pick an open, unassigned `card:ready` issue and comment asking for it. A maintainer assigns it to you.
 2. Give the starter prompt below, the card URL and the card's **Prompt** to your AI tool, or do the card by hand.
@@ -54,7 +54,7 @@ By contributing, you certify the [DCO 1.1](https://developercertificate.org/).
 - A human authors and signs off. An AI or bot identity in `Signed-off-by` is rejected, for example `noreply@anthropic.com`, `[bot]@users.noreply.github.com` or `*@localhost`.
 - Every human `Co-authored-by` must also sign off.
 
-A required check will enforce this once the CI gate lands (forthcoming).
+The required `checks` gate enforces this.
 
 ## AI disclosure
 

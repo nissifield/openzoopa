@@ -1,0 +1,63 @@
+# SPDX-License-Identifier: Apache-2.0
+# Derived from nissifield/snes2DHD (same author), relicensed Apache-2.0.
+name: Task card
+description: One task for one contributor's AI model. Drafted and published by a maintainer.
+title: "Card: "
+labels: ["card:draft"]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: One sentence — what this card achieves.
+    validations:
+      required: true
+  - type: dropdown
+    id: type
+    attributes:
+      label: Type
+      options:
+        - docs
+        - code
+        - test
+    validations:
+      required: true
+  - type: dropdown
+    id: size
+    attributes:
+      label: Size
+      description: S fits in one short PR; M is the maximum for a single card.
+      options:
+        - S
+        - M
+    validations:
+      required: true
+  - type: textarea
+    id: allow
+    attributes:
+      label: Files you may touch
+      description: One glob per line, e.g. docs/** or crates/zoopa-config/src/**
+    validations:
+      required: true
+  - type: textarea
+    id: deny
+    attributes:
+      label: Files you must not touch
+      description: One glob per line. Leave empty for none.
+    validations:
+      required: false
+  - type: textarea
+    id: done
+    attributes:
+      label: Done when
+      description: The exact command to run and the expected output.
+    validations:
+      required: true
+  - type: textarea
+    id: prompt
+    attributes:
+      label: Prompt
+      description: Self-contained instructions to paste into the contributor's AI tool.
+      render: markdown
+    validations:
+      required: true

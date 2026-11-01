@@ -1,0 +1,51 @@
+# SPDX-License-Identifier: Apache-2.0
+# Derived from nissifield/snes2DHD (same author), relicensed Apache-2.0.
+name: checks
+
+# SECURITY: pull_request_target. The PR head is fetched as git objects and read
+# with git; it is never checked out, built or run.
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, edited]
+    branches: [main]
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+concurrency:
+  group: checks-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      # pull_request_target's default ref is the base branch: trusted code only.
+      - name: Checkout base branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          path: _base
+          persist-credentials: false
+
+      # Full history: the checks need the merge base and every commit's trailers.
+      - name: Fetch PR head (data only)
+        env:
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git init -q --bare pr.git
+          git -C pr.git -c transfer.fsckObjects=true fetch --no-tags "https://github.com/$REPO" "+$HEAD_SHA:refs/pr/head" "$BASE_SHA"
+
+      # Checks always run the base branch's copy, never the PR's.
+      - name: Run PR checks
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 -I _base/tools/ci/pr_checks.py pr.git
+
+      - name: Run CI unit tests
+        run: python3 -I -m unittest discover -s _base/tests/ci -t _base

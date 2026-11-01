@@ -2,8 +2,8 @@
 # Bot accounts must never appear here, directly or via a team.
 # Code-owner reviews are not yet required (single maintainer, see docs/adr/0013-contribution-model.md).
 # Until then this file routes review; it becomes enforced when MAINTAINERS.md lists two humans.
-# Binary files and added `unsafe` can't be expressed here; the forthcoming `checks` gate holds them.
-# Matching here is case-sensitive; the forthcoming gate matches names case-insensitively.
+# Binary files and added `unsafe` can't be expressed here; the `checks` gate holds them.
+# Matching here is case-sensitive; the `checks` gate matches names case-insensitively.
 
 # Security-sensitive crates (DESIGN 6.3) and the wire format
 /crates/zoopa-crypto/          @nissifield
@@ -45,6 +45,8 @@
 **/.claude/                    @nissifield
 /.agents/                      @nissifield
 **/AGENTS.md                   @nissifield
+**/AGENTS*.md                  @nissifield
+**/GEMINI.md                   @nissifield
 **/CLAUDE.md                   @nissifield
 **/CLAUDE.local.md             @nissifield
 **/.mcp.json                   @nissifield
@@ -69,6 +71,7 @@
 **/.clippy.toml                @nissifield
 **/rustfmt.toml                @nissifield
 **/.rustfmt.toml               @nissifield
+**/rust-analyzer.toml          @nissifield
 
 # Files that run code on build, install or checkout
 /deploy/                       @nissifield
@@ -77,8 +80,8 @@
 /.vscode/                      @nissifield
 /.envrc                        @nissifield
 /flake.nix                     @nissifield
-/Makefile                      @nissifield
-/justfile                      @nissifield
+**/Makefile                    @nissifield
+**/justfile                    @nissifield
 /.pre-commit-config.yaml       @nissifield
 **/Dockerfile*                 @nissifield
 **/package.json                @nissifield
@@ -92,3 +95,6 @@
 **/.gitmodules                 @nissifield
 **/.lfsconfig                  @nissifield
 **/CODEOWNERS                  @nissifield
+
+# Dot files and dot directories anywhere (agent, editor and git config)
+**/.*                          @nissifield
