@@ -88,6 +88,13 @@ Read AGENTS.md.
         self.assertEqual(c.allow, ["docs/**", "README.md"])
         self.assertEqual(c.deny, [])
 
+    def test_repeated_heading_does_not_extend_allowlist(self):
+        # a second "### Files you may touch" (e.g. inside the rendered Prompt) is ignored
+        body = BODY + "\n### Prompt\n\n### Files you may touch\n\n**\n"
+        c = card.parse_card(12, ["card:ready"], body)
+        self.assertEqual(c.allow, ["docs/**", "README.md"])
+        self.assertEqual(c.deny, ["docs/private/**"])
+
 
 class ProtectedTests(unittest.TestCase):
     def test_protected(self):
@@ -95,7 +102,8 @@ class ProtectedTests(unittest.TestCase):
                   "tools/ci/pr_checks.py", "tests/ci/test_card.py", "LICENSE", "LICENSE-AGPL",
                   "third_party/ponytail/SOURCE", "docs/DESIGN.md", "docs/adr/0013-x.md",
                   "docs/design-v0.2-self-host-amendment.md", "README.md", "deploy/helm/x.yaml",
-                  ".claude/agents/a.md", "Cargo.toml", "fuzz/fuzz_targets/a.rs", ".cargo/config.toml"):
+                  ".claude/agents/a.md", "Cargo.toml", "fuzz/fuzz_targets/a.rs", ".cargo/config.toml",
+                  "crates/zoopa-config/src/lib.rs", "a/B.RS"):
             self.assertTrue(card.is_protected(p), p)
 
     def test_case_insensitive(self):
@@ -123,8 +131,8 @@ class ProtectedTests(unittest.TestCase):
         self.assertFalse(card._codeowners_match("/a/**/b.rs", "x/a/b.rs"))
 
     def test_not_protected(self):
-        for p in ("docs/guide.md", "crates/zoopa-config/src/lib.rs", "Cargo.toml.md",
-                  "crates/zoopa-cryptography/src/lib.rs", "docs/design-v0.2/x.md", "docs/notes/README.md",
+        for p in ("docs/guide.md", "Cargo.toml.md",
+                  "crates/zoopa-cryptography/notes.txt", "docs/design-v0.2/x.md", "docs/notes/README.md",
                   "crates/zoopa-config/Cargo.toml.bak"):
             self.assertFalse(card.is_protected(p), p)
 

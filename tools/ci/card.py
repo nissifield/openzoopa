@@ -55,6 +55,7 @@ PROTECTED = (
     "**/Cargo.toml",
     "**/Cargo.lock",
     "**/build.rs",
+    "**/*.rs",
     "**/rust-toolchain",
     "**/rust-toolchain.toml",
     "**/clippy.toml",
@@ -144,6 +145,8 @@ def _section(body: str, title: str) -> list[str]:
     for line in body.splitlines():
         stripped = line.strip()
         if stripped.startswith("###"):
+            if in_section:
+                break  # only the first matching heading counts
             in_section = stripped == f"### {title}"
         elif in_section and stripped:
             # GitHub issue forms render an empty optional field as "_No response_".

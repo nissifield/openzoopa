@@ -306,10 +306,12 @@ class ChangesFromGitTests(RepoTests):
         self.write_files({"docs/x.md": "branch\n"})
         head = self.commit("head")
         self.git("checkout", "-q", "main")
-        self.write_files({"README.md": "main moved on\n"})
-        self.commit("main2")
-        changes = pr_checks.changes_from_git(str(self.repo), self.base, head)
+        self.write_files({"README.md": "unsafe {}\n"})
+        new_base = self.commit("main2")
+        # base moved on: a two-dot diff would show README.md (and its unsafe line)
+        changes = pr_checks.changes_from_git(str(self.repo), new_base, head)
         self.assertEqual(changes, [("A", "docs/x.md", None)])
+        self.assertEqual(pr_checks.check_unsafe(str(self.repo), new_base, head), [])
 
 
 class MainTests(RepoTests):
@@ -323,7 +325,7 @@ class MainTests(RepoTests):
 
     def run_main(self, *, login="bob", body="Closes #12\n", labels=("card:ready",), state="open",
                  issue_login="alice", is_pr=False, head=None, event_head=None, fetched_body=None,
-                 head_repo="o/r", assignees=None):
+                 head_repo="o/r", assignees=None, card_body=CARD_BODY):
         """Point refs/pr/head at HEAD (or `head`) and run the gate; returns (rc, output lines
         after the stop-commands line). assignees defaults to the PR author."""
         assigned = [login] if assignees is None else assignees
@@ -333,7 +335,7 @@ class MainTests(RepoTests):
                                   "head": {"sha": event_head or head}}}
         event_path = Path(self.tmp.name) / "event.json"
         event_path.write_text(json.dumps(event))
-        issue = {"labels": [{"name": n} for n in labels], "body": CARD_BODY,
+        issue = {"labels": [{"name": n} for n in labels], "body": card_body,
                  "state": state, "user": {"login": issue_login},
                  "assignees": [{"login": a} for a in assigned]}
         if is_pr:
@@ -437,6 +439,12 @@ class MainTests(RepoTests):
         self.assertEqual(rc, 1)
         self.assertTrue(any("protected: CONTRIBUTING.md" in l for l in out))
 
+    def test_rust_source_is_protected_even_if_card_allows_it(self):
+        self.add({"crates/zoopa-config/src/lib.rs": "include !(\"x\");\n"})
+        rc, out = self.run_main(card_body="### Files you may touch\n\ncrates/**\n")
+        self.assertEqual(rc, 1)
+        self.assertIn("- protected: crates/zoopa-config/src/lib.rs needs a maintainer", out)
+
     def test_sensitive_path_fails_with_two_maintainers_message(self):
         self.add({"crates/zoopa-policy/src/lib.rs": "x\n"})
         rc, out = self.run_main()
@@ -532,6 +540,9 @@ class MainTests(RepoTests):
     def test_attributes_cannot_hide_content(self):
         # a PR .gitattributes marking files -diff must not hide an added unsafe line
         self.add({".gitattributes": "docs/* -diff\n", "docs/x.md": "unsafe {}\n"})
+        head = self.git("rev-parse", "HEAD")
+        self.assertEqual(pr_checks.check_unsafe(str(self.repo), self.base, head),
+                         ["added `unsafe` needs a maintainer: a/docs/x.md b/docs/x.md"])
         self.assertEqual(self.run_main()[0], 1)
 
     def test_output_cannot_start_a_workflow_command(self):

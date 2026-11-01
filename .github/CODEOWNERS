@@ -65,6 +65,8 @@
 **/Cargo.toml                  @nissifield
 **/Cargo.lock                  @nissifield
 **/build.rs                    @nissifield
+# until Rust CI forbids unsafe_code via [workspace.lints]; see ADR 0013
+**/*.rs                        @nissifield
 **/rust-toolchain              @nissifield
 **/rust-toolchain.toml         @nissifield
 **/clippy.toml                 @nissifield

@@ -37,9 +37,18 @@ jobs:
           REPO: ${{ github.repository }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        shell: bash
+        # git's output can echo attacker text, so workflow commands are off during the fetch.
         run: |
+          tok=$(python3 -I -c 'import secrets; print(secrets.token_hex(16))')
+          test "${#tok}" -eq 32
+          echo "::stop-commands::$tok"
+          rc=0
           git init -q --bare pr.git
-          git -C pr.git -c transfer.fsckObjects=true fetch --no-tags "https://github.com/$REPO" "+$HEAD_SHA:refs/pr/head" "$BASE_SHA"
+          git -C pr.git -c transfer.fsckObjects=true fetch --no-tags \
+            "https://github.com/$REPO" "+$HEAD_SHA:refs/pr/head" "$BASE_SHA" || rc=$?
+          echo "::$tok::"
+          exit "$rc"
 
       # Checks always run the base branch's copy, never the PR's.
       - name: Run PR checks

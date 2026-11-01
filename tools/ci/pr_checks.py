@@ -34,8 +34,10 @@ CLOSES_RE = re.compile(
     r"(?P<num>[0-9]+)",
     re.IGNORECASE)
 # Keywords and attributes that enable or hide unsafe code, plus `#[path]` and
-# `include!`, which pull in files the allowlist never sees. The real control is
-# forbid(unsafe_code) in every crate root outside the three allowed crates.
+# `include!`, which pull in files the allowlist never sees. A best-effort
+# tripwire only: a line regex can be dodged. The real control is
+# `[workspace.lints.rust] unsafe_code = "forbid"` in the protected root
+# Cargo.toml; until Rust CI enforces it, non-maintainer `.rs` changes are protected.
 UNSAFE_RE = re.compile(r"\b(?:unsafe|unsafe_code|no_mangle|export_name|link_section|global_asm)\b"
                        r"|#\s*!?\[\s*path\s*=|\binclude!")
 SIGNOFF_RE = re.compile(r"[^<>]*<([^<>\s]+)>")  # exactly one <email>

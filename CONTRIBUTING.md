@@ -8,7 +8,7 @@ The project is in phase 0. Most work is security-sensitive and done by the maint
 
 - Outside work starts from a **task card**: a `card:ready` issue written by someone listed in [MAINTAINERS.md](MAINTAINERS.md).
 - For anything else, open an issue or a Discussion first.
-- These are not offered as cards: crypto, the wire protocol (`proto/`), work that needs an RFC ([DESIGN.md §6.4](docs/DESIGN.md#64-governance-and-contribution)), the sensitive crates in [§6.3](docs/DESIGN.md#63-security-posture), crates allowed to use `unsafe`, new dependencies and `Cargo.*` changes, CI and the supply chain.
+- These are not offered as cards: crypto, the wire protocol (`proto/`), work that needs an RFC ([DESIGN.md §6.4](docs/DESIGN.md#64-governance-and-contribution)), the sensitive crates in [§6.3](docs/DESIGN.md#63-security-posture), crates allowed to use `unsafe`, new dependencies and `Cargo.*` changes, CI and the supply chain, and any `.rs` file until Rust CI enforces `unsafe_code = "forbid"`.
 - Changes to the §6.3 paths need two human maintainers. An agent approval never counts.
 
 ## The card flow

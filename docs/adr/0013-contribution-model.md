@@ -52,7 +52,7 @@ Planned mitigations: most take effect with the P2 gate and settings. Until then 
 | The runner's git parses an attacker packfile | `transfer.fsckObjects`, pinned GitHub-hosted runner, 10-minute timeout; residual risk accepted |
 | A green result goes stale after the card's label, state or allowlist changes | The manual merge re-checks the card; re-evaluate at merge time before any auto-merge |
 | Maintainer-authored PR whose head is a fork borrows the DCO-only path | DCO-only applies only when the head repo is this repo; a fork head is checked as an outsider |
-| `unsafe` hidden behind `#[path]`, `include!`, renames or keyword-free attributes | The gate flags them (and removed `unsafe_code` lints); the real control is `forbid(unsafe_code)` in every crate root outside the three allowed crates, added with Rust CI |
+| `unsafe` hidden behind `#[path]`, `include!`, renames or keyword-free attributes | Non-maintainer `.rs` changes are protected until Rust CI enforces `unsafe_code = "forbid"` from the protected root `Cargo.toml` (`[workspace.lints.rust]`); the gate's text scan (including removed `unsafe_code` lints) is a best-effort tripwire |
 | Maintainer account takeover | 2FA with passkey and recovery codes, secret scanning; residual risk accepted |
 | DCO is an attestation, not authentication | Residual risk accepted |
 

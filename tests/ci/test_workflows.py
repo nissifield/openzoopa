@@ -78,6 +78,14 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("${{ x }}", blocks[0][1])
         self.assertNotIn("K:", blocks[0][1])
 
+    def test_fetch_step_stops_commands_first(self):
+        # git's output can echo attacker text, so commands are off before `fetch` and the
+        # step's own exit code survives the resume line
+        (_, text), = [b for b in run_blocks(WORKFLOWS / "checks.yml") if "fetch" in b[1]]
+        self.assertIn("::stop-commands::", text)
+        self.assertLess(text.index("::stop-commands::"), text.index("fetch"))
+        self.assertEqual(text.strip().splitlines()[-1].strip(), 'exit "$rc"')
+
     def test_exactly_one_checks_job(self):
         keys = names = 0
         for f in FILES:

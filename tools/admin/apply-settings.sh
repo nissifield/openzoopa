@@ -63,6 +63,30 @@ expect "repos/$R/actions/permissions/selected-actions" '.github_owned_allowed ==
 expect "repos/$R/actions/permissions/fork-pr-contributor-approval" \
   '.approval_policy == "all_external_contributors"' "fork PR approval is not 'all_external_contributors'"
 
+# From 2026-12-02 GitHub blocks pull_request_target workflows by default on public
+# repos. Allow that event for checks.yml only (allowed_events is an allowlist).
+# shortcut: unverified whether a path-scoped policy overrides the default; the
+# readback fails safe and the closing message asks for a fork-PR liveness check.
+POLICY_FAIL="the pull_request_target policy for checks.yml is not set; add it by hand in Settings, Actions, Policies, then re-run"
+policy=$(cat <<'JSON'
+{"name": "allow-checks-prt", "enforcement": "active",
+ "conditions": {"workflow_path": {"include": [".github/workflows/checks.yml"], "exclude": []}},
+ "rules": [{"type": "restrict_action_events", "parameters": {"allowed_events": ["pull_request_target"]}}]}
+JSON
+)
+pid=$(gh api "repos/$R/actions/policies" --jq '(.policies? // .)[]|select(.name=="allow-checks-prt").id') ||
+  { echo "settings mismatch: $POLICY_FAIL" >&2; exit 1; }
+if [ -n "$pid" ]; then
+  printf '%s' "$policy" | gh api -X PUT "repos/$R/actions/policies/$pid" --silent --input - ||
+    { echo "settings mismatch: $POLICY_FAIL" >&2; exit 1; }
+else
+  printf '%s' "$policy" | gh api -X POST "repos/$R/actions/policies" --silent --input - ||
+    { echo "settings mismatch: $POLICY_FAIL" >&2; exit 1; }
+fi
+expect "repos/$R/actions/policies" \
+  '[(.policies? // .)[]|select(.name=="allow-checks-prt" and .enforcement=="active" and any(.rules[]; .type=="restrict_action_events" and (.parameters.allowed_events|index("pull_request_target"))))]|length==1' \
+  "$POLICY_FAIL"
+
 # Order matters: a required check that no workflow on main reports stays
 # pending forever and blocks every merge. Refuse until checks.yml is on main.
 if ! gh api "repos/$R/contents/.github/workflows/checks.yml?ref=main" --silent >/dev/null 2>&1; then
@@ -105,5 +129,11 @@ applied to $R. By hand:
 - Dependabot alerts: enable once Cargo.lock exists.
 - Confirm with read-only calls: gh api repos/$R, repos/$R/actions/permissions,
   repos/$R/branches/main/protection.
+- After 2026-12-02, open a test fork PR and confirm \`checks\` runs; check the policy
+  insights for blocked checks.yml runs.
+- Before merging an outside PR, verify the required check came from this workflow (a fork's
+  pull_request job can also be named \`checks\`); this must print true:
+  gh pr checks N -R $R --json name,event,state --jq '[.[]|select(.name=="checks")]|length==1 and .[0].event=="pull_request_target" and .[0].state=="SUCCESS"'
+  (the gh field values are unverified: confirm them once on a real PR.)
 - Merge outside PRs with: gh pr merge N --squash --match-head-commit <reviewed-sha>
 MSG
