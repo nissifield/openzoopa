@@ -683,7 +683,7 @@ openzoopa/
 
 ### 6.3 Security posture
 
-- **SECURITY.md:** private reporting via GitHub Security Advisories plus `security@` (PGP optional). Acknowledgement within 72 h. Coordinated disclosure target of 90 days. A supported-versions table.
+- **SECURITY.md:** private reporting through GitHub private vulnerability reporting only. Acknowledgement within 7 days, best effort. Coordinated disclosure target of 90 days. A supported-versions table once releases exist. Owner decision 2026-11-01, [ADR-0013](adr/0013-contribution-model.md); see [SECURITY.md](../SECURITY.md).
 - **Security-sensitive paths** (crypto, spa, tunnel, policy, pki, token, idp, pra): two-maintainer review, changes need an RFC, and each has fuzz coverage.
 - **Releases:**
   - built on native runners per architecture (no cross-compiling where avoidable);
@@ -701,6 +701,8 @@ openzoopa/
 - **RFC process** (`docs/rfcs/NNNN-*.md`), required for: wire protocol, crypto, policy semantics, public API breaking changes, new sensitive-path dependencies, and licensing.
 - **ADRs** for smaller decisions. This document seeds ADR-0001 to 0012 from §0.
 - DCO sign-off is enforced. Conventional Commits drive changelogs (git-cliff). Contributor Covenant code of conduct.
+- Task cards (ADR-0013): outside work starts from a card written by a maintainer in MAINTAINERS.md; a required `checks` job (forthcoming) on `pull_request_target` reads the PR as data and checks DCO on every commit, the card link, the allowlist and protected paths; model keys never enter CI; review agents run on maintainers' machines and are advisory.
+- Auto-merge is off until ADR-0013's trigger; then docs-only; §6.3 paths always need two human maintainers. GOVERNANCE.md is deferred until there are 3 or more maintainers.
 
 ### 6.5 Versioning and releases
 
@@ -1036,6 +1038,9 @@ These are design targets enforced by nightly benchmarks. They are not marketing 
 - cargo-vet, cargo-deny, pinned toolchain.
 - Signed artifacts, provenance, SBOM.
 - Connector auto-update verifies a pinned release key and supports rollback. Admins can disable it or point it at a self-hosted mirror.
+
+**Contribution pipeline (A8: fork author or commenter)**
+- Threats and mitigations: see the threat-model delta in [ADR-0013](adr/0013-contribution-model.md#threat-model-delta).
 
 ### 9.3 What we protect against
 

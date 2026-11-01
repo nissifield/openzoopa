@@ -1,0 +1,94 @@
+# Protected paths: a human maintainer must review these; they are never auto-merged.
+# Bot accounts must never appear here, directly or via a team.
+# Code-owner reviews are not yet required (single maintainer, see docs/adr/0013-contribution-model.md).
+# Until then this file routes review; it becomes enforced when MAINTAINERS.md lists two humans.
+# Binary files and added `unsafe` can't be expressed here; the forthcoming `checks` gate holds them.
+# Matching here is case-sensitive; the forthcoming gate matches names case-insensitively.
+
+# Security-sensitive crates (DESIGN 6.3) and the wire format
+/crates/zoopa-crypto/          @nissifield
+/crates/zoopa-spa/             @nissifield
+/crates/zoopa-tunnel/          @nissifield
+/crates/zoopa-policy/          @nissifield
+/crates/zoopa-pki/             @nissifield
+/crates/zoopa-token/           @nissifield
+/crates/zoopa-idp/             @nissifield
+/crates/zoopa-pra/             @nissifield
+/proto/                        @nissifield
+/crates/zoopa-proto/           @nissifield
+
+# Crates allowed to use unsafe (DESIGN 5.1)
+/crates/zoopa-netstack/        @nissifield
+/crates/zoopa-client-ffi/      @nissifield
+/crates/zoopa-posture/         @nissifield
+
+# Design, RFCs, ADRs and the threat model
+/docs/rfcs/                    @nissifield
+/docs/adr/                     @nissifield
+/docs/DESIGN.md                @nissifield
+/docs/design-*.md              @nissifield
+/docs/threat-model.md          @nissifield
+
+# Licences, governance and the CI trust root
+**/LICENSE*                    @nissifield
+/LICENSING.md                  @nissifield
+/third_party/                  @nissifield
+/MAINTAINERS.md                @nissifield
+/SECURITY.md                   @nissifield
+/CODE_OF_CONDUCT.md            @nissifield
+# Contribution docs: security and contact links
+/CONTRIBUTING.md               @nissifield
+/README.md                     @nissifield
+
+# CI, agent rules and contribution tooling
+/.github/                      @nissifield
+**/.claude/                    @nissifield
+/.agents/                      @nissifield
+**/AGENTS.md                   @nissifield
+**/CLAUDE.md                   @nissifield
+**/CLAUDE.local.md             @nissifield
+**/.mcp.json                   @nissifield
+/tools/                        @nissifield
+/tests/ci/                     @nissifield
+/tests/review/                 @nissifield
+/tests/golden/                 @nissifield
+/tests/e2e/                    @nissifield
+/fuzz/                         @nissifield
+/xtask/                        @nissifield
+
+# Build and supply chain
+**/.cargo/                     @nissifield
+/supply-chain/                 @nissifield
+**/deny.toml                   @nissifield
+**/Cargo.toml                  @nissifield
+**/Cargo.lock                  @nissifield
+**/build.rs                    @nissifield
+**/rust-toolchain              @nissifield
+**/rust-toolchain.toml         @nissifield
+**/clippy.toml                 @nissifield
+**/.clippy.toml                @nissifield
+**/rustfmt.toml                @nissifield
+**/.rustfmt.toml               @nissifield
+
+# Files that run code on build, install or checkout
+/deploy/                       @nissifield
+/.config/                      @nissifield
+/.devcontainer/                @nissifield
+/.vscode/                      @nissifield
+/.envrc                        @nissifield
+/flake.nix                     @nissifield
+/Makefile                      @nissifield
+/justfile                      @nissifield
+/.pre-commit-config.yaml       @nissifield
+**/Dockerfile*                 @nissifield
+**/package.json                @nissifield
+**/package-lock.json           @nissifield
+**/pnpm-lock.yaml              @nissifield
+**/yarn.lock                   @nissifield
+**/.npmrc                      @nissifield
+
+# Git behaviour files, wherever they appear
+**/.gitattributes              @nissifield
+**/.gitmodules                 @nissifield
+**/.lfsconfig                  @nissifield
+**/CODEOWNERS                  @nissifield
