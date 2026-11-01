@@ -12,6 +12,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import types
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -184,14 +185,19 @@ class AgentEnvTests(unittest.TestCase):
              "CLAUDE_CODE_OAUTH_TOKEN": "d", "GITHUB_PAT": "e",
              "AWS_SECRET_ACCESS_KEY": "f", "SSH_AUTH_SOCK": "/s",
              "GIT_ASKPASS": "x", "PATH": "/bin", "HOME": "/h",
-             "ANTHROPIC_API_KEY": "k"}, "/empty")
-        self.assertEqual(env, {"PATH": "/bin", "HOME": "/h", "ANTHROPIC_API_KEY": "k",
-                               "GH_CONFIG_DIR": "/empty"})
+             "CLAUDE_CONFIG_DIR": "/c", "XDG_CONFIG_HOME": "/x",
+             "ANTHROPIC_BASE_URL": "http://x", "ANTHROPIC_API_KEY": "k"}, "/empty")
+        self.assertEqual(env, {"PATH": "/bin", "ANTHROPIC_API_KEY": "k",
+                               "HOME": "/empty", "GH_CONFIG_DIR": "/empty"})
+
+    def test_agent_cmd_is_pinned(self):
+        self.assertEqual(review_queue.AGENT_CMD,
+                         ("claude", "-p", "--bare", "--tools", "", "--strict-mcp-config"))
 
     def test_token_never_passes_even_if_listed(self):
         with mock.patch.object(review_queue, "ALLOW_ENV", ("PATH", "FOO_TOKEN")):
             env = review_queue.agent_env({"PATH": "/bin", "FOO_TOKEN": "c"}, "/e")
-        self.assertEqual(env, {"PATH": "/bin", "GH_CONFIG_DIR": "/e"})
+        self.assertEqual(env, {"PATH": "/bin", "HOME": "/e", "GH_CONFIG_DIR": "/e"})
         self.assertFalse([k for k in review_queue.ALLOW_ENV if k.endswith("_TOKEN")])
 
     def test_agent_runs_with_stripped_env(self):
@@ -200,6 +206,23 @@ class AgentEnvTests(unittest.TestCase):
         with mock.patch.dict(os.environ, {"GH_TOKEN": "secret"}):
             out = review_queue._agent([sys.executable, "-I", "-c", code], "")
         self.assertEqual(out.strip(), "unset True")
+
+    def test_agent_isolated_from_home_and_cwd(self):
+        real = Path(tempfile.mkdtemp()); self.addCleanup(shutil.rmtree, real)
+        for p in (real / ".claude" / "CLAUDE.md", real / "CLAUDE.md"):
+            p.parent.mkdir(parents=True, exist_ok=True); p.write_text("SENTINEL-7f3\n")
+        old = os.getcwd(); os.chdir(real); self.addCleanup(os.chdir, old)
+        code = ("import os,json,sys;print(json.dumps({'cwd':os.path.realpath(os.getcwd()),"
+                "'home':os.path.realpath(os.environ['HOME']),'ls':os.listdir('.'),"
+                "'env':dict(os.environ),'argv':sys.argv,'stdin':sys.stdin.read()}))")
+        with mock.patch.dict(os.environ, {"HOME": str(real), "CLAUDE_CONFIG_DIR": str(real),
+                                          "ANTHROPIC_BASE_URL": "http://x"}):
+            raw = review_queue._agent([sys.executable, "-I", "-c", code], "prompt")
+        out = json.loads(raw)
+        self.assertEqual(out["cwd"], out["home"]); self.assertEqual(out["ls"], [])
+        self.assertNotIn(str(real), raw); self.assertNotIn("SENTINEL", raw)
+        self.assertNotIn("ANTHROPIC_BASE_URL", out["env"]); self.assertNotIn("CLAUDE_CONFIG_DIR", out["env"])
+        self.assertFalse(Path(out["home"]).exists())
 
     def test_agent_timeout_is_no_verdict(self):
         with mock.patch.object(review_queue.subprocess, "run",
@@ -272,8 +295,34 @@ class QueueTestCase(unittest.TestCase):
         return out
 
 
-def writes(gh):
-    return [c for c in gh.calls if c[:3] == ("api", "-X", "POST")]
+def reads(numbers):
+    s = {("repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"),
+         ("api", "user", "--jq", ".login"),
+         ("pr", "list", "--state", "open", "--limit", "1000", "--json", "number"),
+         ("api", "repos/o/r/issues/12")}
+    for n in numbers:
+        s |= {("pr", "view", str(n), "--json", "headRefOid,statusCheckRollup"),
+              ("api", f"repos/o/r/pulls/{n}"),
+              ("api", "--paginate", "--slurp", f"repos/o/r/pulls/{n}/reviews"),
+              ("pr", "view", str(n), "--json", "headRefOid")}
+    return s
+
+
+def writes(gh, numbers=(7,)):
+    """Every gh call is an exact allowed read or the one COMMENT-review POST;
+    anything else (PATCH, --method, -XPOST, -F, extra or duplicate fields) fails."""
+    ok_reads, posts = reads(numbers), []
+    for c in gh.calls:
+        if c in ok_reads:
+            continue
+        if not (len(c) == 10 and c[:3] == ("api", "-X", "POST")
+                and c[3] in {f"repos/o/r/pulls/{n}/reviews" for n in numbers}
+                and c[4::2] == ("-f", "-f", "-f")
+                and re.fullmatch(r"commit_id=[0-9a-f]{40}", c[5])
+                and c[7] == "event=COMMENT" and c[9].startswith("body=")):
+            raise AssertionError(f"gh call outside the allowlist: {c}")
+        posts.append(c)
+    return posts
 
 
 class RunTests(QueueTestCase):
@@ -457,34 +506,50 @@ class MaintainerPrTests(QueueTestCase):
 
 
 class NoMergeTests(QueueTestCase):
-    FORBIDDEN_ARGS = {"merge", "review", "--auto", "graphql", "edit"}
-    FORBIDDEN_PARTS = ("event=APPROVE", "event=REQUEST_CHANGES",
-                       "enablePullRequestAutoMerge")
-
-    def check_call(self, args):
-        self.assertFalse(self.FORBIDDEN_ARGS & set(args), args)
-        for a in args:
-            for part in self.FORBIDDEN_PARTS:
-                self.assertNotIn(part, a.split("body=")[0], args)
-        for i, a in enumerate(args[:-1]):
-            if a == "-X":
-                self.assertEqual(args[i + 1], "POST", args)
-
     def test_no_forbidden_gh_call(self):
         for text in OUT.values():
-            gh, git_dir, _ = self.pr(post=True)
-            rcs = [self.run_q(gh, git_dir, make_agent(text), dry_run=dry)[0]
-                   for dry in (True, False)]
-            for args in gh.calls:
-                self.check_call(args)
-            self.assertEqual(rcs, [0, 0])
-            self.assertEqual(len(writes(gh)), 1)
+            for dry in (True, False):
+                gh, git_dir, _ = self.pr(post=True)
+                rc, _ = self.run_q(gh, git_dir, make_agent(text), dry_run=dry)
+                self.assertEqual(rc, 0)
+                if dry:
+                    self.assertEqual(writes(gh), [])
+                else:
+                    self.assertEqual(len(writes(gh)), 1)
+
+    def test_extra_mutation_is_caught(self):
+        gh, git_dir, _ = self.pr(post=True)
+        orig = review_queue._review_fetched
+
+        def evil(gh, *a):
+            orig(gh, *a)
+            gh("api", "repos/o/r/pulls/7", "--method", "PATCH", "-f", "state=closed")
+
+        with mock.patch.object(review_queue, "_review_fetched", evil):
+            self.run_q(gh, git_dir, make_agent(APPROVE_OUT), dry_run=False)
+        with self.assertRaisesRegex(AssertionError, "outside the allowlist"):
+            writes(gh)
+
+    def test_allowlist_rejects_variants(self):
+        p, h = "repos/o/r/pulls/7/reviews", "commit_id=" + "a" * 40
+        for c in [("api", p, "--method", "POST", "-f", h, "-f", "event=COMMENT", "-f", "body=x"),
+                  ("api", "-XPOST", p, "-f", h, "-f", "event=COMMENT", "-f", "body=x"),
+                  ("api", "-X", "POST", p, "-f", h, "-f", "event=APPROVE", "-f", "body=x"),
+                  ("api", "-X", "POST", p, "-f", h, "-f", "event=COMMENT", "-F", "body=@f"),
+                  ("api", "-X", "POST", p, "-f", h, "-f", "event=COMMENT", "-f", "body=x", "-f", "event=APPROVE"),
+                  ("api", "repos/o/r/pulls/7", "-X", "PATCH", "-f", "state=closed")]:
+            with self.assertRaises(AssertionError, msg=c):
+                writes(types.SimpleNamespace(calls=[c]))
 
     def test_source_has_no_merge_or_approve(self):
         src = (ROOT / "tools" / "review" / "review_queue.py").read_text()
         for rx in (r"""["']merge["']""", r"--auto", r"""["']APPROVE["']""", r"REQUEST_CHANGES",
-                   r"enablePullRequestAutoMerge", r"graphql", r"/merge",
-                   r"""["']review["']""", r"""["']edit["']""", r"event=(?!COMMENT\b)"):
+                   r"enablePullRequestAutoMerge", r"/merge",
+                   # no raw `gh api graphql` (it can carry mutations); gh pr/repo view
+                   # read via GraphQL internally, which is fine
+                   r"graphql",
+                   r"""["']review["']""", r"""["']edit["']""", r"event=(?!COMMENT\b)",
+                   r"--method", r"\b(PATCH|PUT|DELETE)\b", r'"-F"', r"--input"):
             self.assertIsNone(re.search(rx, src), rx)
         self.assertIn('"merge-base"', src)  # still allowed
 
@@ -493,10 +558,11 @@ class CliTests(unittest.TestCase):
     def test_dry_run_and_live_is_usage_error(self):
         with mock.patch.object(review_queue, "_gh", side_effect=AssertionError("gh called")):
             with contextlib.redirect_stderr(io.StringIO()):
-                self.assertEqual(review_queue.main(["--dry-run", "--live", "--", "x"]), 2)
-                self.assertEqual(review_queue.main(["--live"]), 2)
-                self.assertEqual(review_queue.main(["--pr", "x", "--", "x"]), 2)
-                self.assertEqual(review_queue.main(["--bogus", "--", "x"]), 2)
+                self.assertEqual(review_queue.main(["--dry-run", "--live"]), 2)
+                self.assertEqual(review_queue.main(["--pr", "x"]), 2)
+                self.assertEqual(review_queue.main(["--bogus"]), 2)
+                self.assertEqual(review_queue.main(["--", "claude"]), 2)
+                self.assertEqual(review_queue.main(["--dry-run", "--", "x"]), 2)
 
     def test_live_needs_fine_grained_token(self):
         for env in ({"GH_TOKEN": "x"}, {"GH_TOKEN": "ghp_admin"}, {"GH_TOKEN": ""}):
@@ -504,7 +570,7 @@ class CliTests(unittest.TestCase):
                  mock.patch.object(review_queue, "_gh", side_effect=AssertionError("gh called")):
                 err = io.StringIO()
                 with contextlib.redirect_stderr(err):
-                    self.assertEqual(review_queue.main(["--live", "--", "x"]), 2)
+                    self.assertEqual(review_queue.main(["--live"]), 2)
                 self.assertIn("--live needs a fine-grained GH_TOKEN (github_pat_...)", err.getvalue())
 
     def test_live_without_token_is_usage_error(self):
@@ -512,14 +578,14 @@ class CliTests(unittest.TestCase):
              mock.patch.object(review_queue, "_gh", side_effect=AssertionError("gh called")), \
              contextlib.redirect_stderr(io.StringIO()):
             os.environ.pop("GH_TOKEN", None)
-            self.assertEqual(review_queue.main(["--live", "--", "x"]), 2)
+            self.assertEqual(review_queue.main(["--live"]), 2)
 
     def test_live_with_fine_grained_token_proceeds_to_origin_check(self):
         with mock.patch.dict(os.environ, {"GH_TOKEN": "github_pat_x"}), \
              mock.patch.object(review_queue, "_gh", return_value="o/r\n") as gh, \
              mock.patch.object(review_queue.pr_checks, "_git", return_value="https://github.com/x/y"), \
              contextlib.redirect_stderr(io.StringIO()):
-            self.assertEqual(review_queue.main(["--live", "--", "x"]), 2)
+            self.assertEqual(review_queue.main(["--live"]), 2)
         gh.assert_called_once()
 
 

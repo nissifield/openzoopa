@@ -22,7 +22,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import Callable, Mapping
+from typing import Callable, Mapping, Sequence
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools" / "ci"))
@@ -34,8 +34,12 @@ Gh = Callable[..., str]  # runs `gh` with args, returns stdout
 Agent = Callable[[list[str], str], str]  # runs the agent command, prompt on stdin
 
 VERDICTS = ("APPROVE-ADVISORY", "CHANGES-REQUESTED", "NEEDS-MAINTAINER")
-# the agent sees only these variables (never a *_TOKEN, see agent_env)
-ALLOW_ENV = ("PATH", "HOME", "USER", "LOGNAME", "LANG", "LC_ALL", "LC_CTYPE",
+# the only agent: no tools, no MCP; --bare skips CLAUDE.md, memory, hooks and the
+# keychain. It runs in an empty temp HOME and cwd, so no user or project settings exist.
+AGENT_CMD = ("claude", "-p", "--bare", "--tools", "", "--strict-mcp-config")
+# the agent sees only these variables (never a *_TOKEN, see agent_env); HOME is
+# always the empty temp dir, never the real one
+ALLOW_ENV = ("PATH", "USER", "LOGNAME", "LANG", "LC_ALL", "LC_CTYPE",
              "TERM", "TMPDIR", "ANTHROPIC_API_KEY")
 MAX_BODY = 60000
 MAX_DIFF = 200_000
@@ -75,12 +79,12 @@ def build_prompt(role_md: str, card_body: str, pr_body: str, diff: str,
     )
 
 
-def agent_env(environ: Mapping[str, str], gh_config_dir: str) -> dict:
+def agent_env(environ: Mapping[str, str], home: str) -> dict:
     """The agent's environment: an allowlist (a *_TOKEN never passes, even if
-    listed) plus a gh config dir with no stored login."""
+    listed) plus an empty HOME, which is also its gh config dir (no stored login)."""
     env = {k: environ[k] for k in ALLOW_ENV
            if k in environ and not k.upper().endswith("_TOKEN")}
-    env["GH_CONFIG_DIR"] = gh_config_dir
+    env["HOME"] = env["GH_CONFIG_DIR"] = home
     return env
 
 
@@ -110,11 +114,11 @@ def _gh(*args: str) -> str:
 
 def _agent(cmd: list[str], prompt: str) -> str:
     # not check=True: a non-zero agent exit must not kill the queue; a timeout is no verdict
-    with tempfile.TemporaryDirectory() as cfg:
+    with tempfile.TemporaryDirectory() as home:
         try:
             return subprocess.run(cmd, input=prompt, capture_output=True, text=True,
-                                  errors="replace", env=agent_env(os.environ, cfg),
-                                  timeout=900).stdout
+                                  errors="replace", env=agent_env(os.environ, home),
+                                  cwd=home, timeout=900).stdout
         except subprocess.TimeoutExpired:
             return ""
 
@@ -246,7 +250,7 @@ def _review_fetched(gh, git, git_dir, agent, agent_cmd, role_md, maint, repo, me
        "-f", f"commit_id={head}", "-f", "event=COMMENT", "-f", f"body={text}")
 
 
-def run(agent_cmd: list[str], dry_run: bool = True, gh: Gh | None = None,
+def run(agent_cmd: Sequence[str] = AGENT_CMD, dry_run: bool = True, gh: Gh | None = None,
         agent: Agent | None = None, git_dir: str | None = None,
         only: int | None = None) -> int:
     gh = gh or _gh
@@ -273,12 +277,11 @@ def run(agent_cmd: list[str], dry_run: bool = True, gh: Gh | None = None,
     return rc
 
 
-USAGE = "usage: review_queue.py [--dry-run | --live] [--pr N] -- <agent command...>"
+USAGE = "usage: review_queue.py [--dry-run | --live] [--pr N]"
 
 
 def main(argv: list[str]) -> int:
-    flags, agent_cmd = (argv[:argv.index("--")], argv[argv.index("--") + 1:]) \
-        if "--" in argv else (argv, [])
+    flags = list(argv)
     only = None
     if "--pr" in flags:
         i = flags.index("--pr")
@@ -287,8 +290,7 @@ def main(argv: list[str]) -> int:
             return 2
         only = int(flags[i + 1])
         del flags[i:i + 2]
-    if (not agent_cmd or set(flags) - {"--dry-run", "--live"}
-            or {"--dry-run", "--live"} <= set(flags)):
+    if set(flags) - {"--dry-run", "--live"} or {"--dry-run", "--live"} <= set(flags):
         print(USAGE, file=sys.stderr)
         return 2
     if "--live" in flags and not os.environ.get("GH_TOKEN", "").startswith("github_pat_"):
@@ -301,7 +303,7 @@ def main(argv: list[str]) -> int:
     if not re.search(r"github\.com[:/]" + re.escape(repo) + "$", url):
         print(f"origin {url} is not github.com/{repo}", file=sys.stderr)
         return 2
-    return run(agent_cmd, dry_run="--live" not in flags, only=only)
+    return run(list(AGENT_CMD), dry_run="--live" not in flags, only=only)
 
 
 if __name__ == "__main__":
