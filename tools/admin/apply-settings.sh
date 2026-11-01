@@ -83,8 +83,12 @@ else
   printf '%s' "$policy" | gh api -X POST "repos/$R/actions/policies" --silent --input - ||
     { echo "settings mismatch: $POLICY_FAIL" >&2; exit 1; }
 fi
-expect "repos/$R/actions/policies" \
-  '[(.policies? // .)[]|select(.name=="allow-checks-prt" and .enforcement=="active" and .conditions.workflow_path.include==[".github/workflows/checks.yml"] and any(.rules[]; .type=="restrict_action_events" and .parameters.allowed_events==["pull_request_target"]))]|length==1' \
+# The list endpoint omits conditions and rules: read the single policy back.
+pid=$(gh api --paginate "repos/$R/actions/policies" --jq '(.policies? // .)[]|select(.name=="allow-checks-prt").id') ||
+  { echo "settings mismatch: $POLICY_FAIL" >&2; exit 1; }
+[ "$(printf '%s\n' "$pid" | grep -c .)" -eq 1 ] || { echo "settings mismatch: $POLICY_FAIL" >&2; exit 1; }
+expect "repos/$R/actions/policies/$pid" \
+  '.enforcement=="active" and .conditions.workflow_path.include==[".github/workflows/checks.yml"] and any(.rules[]; .type=="restrict_action_events" and .parameters.allowed_events==["pull_request_target"])' \
   "$POLICY_FAIL"
 
 # Order matters: a required check that no workflow on main reports stays
@@ -135,5 +139,5 @@ applied to $R. By hand:
   pull_request job can also be named \`checks\`); this must print true:
   gh pr checks N -R $R --json name,event,state --jq '[.[]|select(.name=="checks")]|length==1 and .[0].event=="pull_request_target" and .[0].state=="SUCCESS"'
   (the gh field values are unverified: confirm them once on a real PR.)
-- Merge outside PRs with: gh pr merge N --squash --match-head-commit <reviewed-sha>
+- Merge outside PRs with: gh pr merge N --squash --match-head-commit <full 40-char reviewed sha>
 MSG
