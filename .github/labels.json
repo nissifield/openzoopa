@@ -1,0 +1,12 @@
+[
+  {
+    "name": "card:draft",
+    "color": "fbca04",
+    "description": "Task card still being drafted; not claimable yet"
+  },
+  {
+    "name": "card:ready",
+    "color": "0e8a16",
+    "description": "Task card reviewed and ready to claim"
+  }
+]

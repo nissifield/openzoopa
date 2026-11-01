@@ -10,8 +10,8 @@ The project has one maintainer and is in phase 0. DESIGN [§5.3](../DESIGN.md#53
 
 ## Decision
 
-- **Task cards.** Types are `docs`, `code` and `test`. A card is trusted only if its author is listed in [MAINTAINERS.md](../../MAINTAINERS.md), read from the base branch. Only `card:ready` cards count.
-- **`checks` gate (forthcoming).** A required `checks` job on `pull_request_target` reads the PR as data. It never checks the PR out and never runs cargo or rustup.
+- **Task cards.** Types are `docs`, `code` and `test`. A card is trusted only if its author is listed in [MAINTAINERS.md](../../MAINTAINERS.md), read from the base branch. Only `card:ready` cards count, and the card must be assigned to the PR author.
+- **`checks` gate.** A required `checks` job on `pull_request_target` reads the PR as data. It never checks the PR out and never runs cargo or rustup.
 - **DCO.** Checked on every commit by the gate. The rules are in [CONTRIBUTING.md](../../CONTRIBUTING.md#developer-certificate-of-origin-dco).
 - **AI disclosure.** `Assisted-by: <tool> <model>` is policy, not machine-checked.
 - **Reviewer agents.** Advisory only. The agent has no credentials and no tools; the runner posts its output as a comment review.
@@ -22,7 +22,7 @@ The project has one maintainer and is in phase 0. DESIGN [§5.3](../DESIGN.md#53
   - code never auto-merges until an ADR revisits it;
   - §6.3 paths always need two humans, and an agent approval never counts.
 - **Branch protection on `main`.** Phase 0: required `checks`, review count 0, code-owner reviews off, `enforce_admins=false`, linear history, no force-push, no deletion. When MAINTAINERS.md lists two humans, flip to 1 approval, code-owner reviews and last-push approval.
-- **Two-human rule.** Branch protection cannot require two approvals per path. The forthcoming gate must enforce the §6.3 two-human rule (two approvals on the head SHA from distinct maintainers); until then the maintainer applies it by hand. Whether the PR author counts as one of the two is open.
+- **Two-human rule.** Branch protection cannot require two approvals per path. The gate fails every non-maintainer PR that touches a §6.3 path ("needs two human maintainers"), which with one maintainer means always. Maintainer PRs on §6.3 paths get DCO only; the maintainer applies the rule by hand until MAINTAINERS.md lists two humans. Whether the PR author counts as one of the two is open.
 
 ### Owner decisions, 2026-11-01
 
@@ -47,7 +47,12 @@ Planned mitigations: most take effect with the P2 gate and settings. Until then 
 | The rules rewritten by a PR (CODEOWNERS, MAINTAINERS.md, gate code) | Protected paths; the gate runs the base-branch copy |
 | Maintainer's machine runs PR code (`build.rs`, proc-macros, tests, nested `.cargo` or agent config) | Never build, test or point a tool-using agent at an unmerged outside branch on the maintainer machine; review with the no-tools agent |
 | Commits pushed after review, before the merge click | Merge with `--match-head-commit <reviewed-sha>`; last-push approval after the flip |
-| Forged maintainer identity | Maintainer status comes from the PR author (`pull_request.user`), never from commit or sign-off emails, which are self-asserted; re-registration of a renamed login is a residual risk (consider numeric IDs in P2) |
+| Forged maintainer identity | Maintainer status comes from the PR author (`pull_request.user`), never from commit or sign-off emails, which are self-asserted; logins, not numeric IDs, are compared. A renamed login that someone re-registers would pass as maintainer (DCO-only path); accepted while auto-merge is off. The maintainer must update MAINTAINERS.md on any rename |
+| Workflow commands injected through log output | The gate prints `::stop-commands::<random token>` first and escapes every untrusted string |
+| The runner's git parses an attacker packfile | `transfer.fsckObjects`, pinned GitHub-hosted runner, 10-minute timeout; residual risk accepted |
+| A green result goes stale after the card's label, state or allowlist changes | The manual merge re-checks the card; re-evaluate at merge time before any auto-merge |
+| Maintainer-authored PR whose head is a fork borrows the DCO-only path | DCO-only applies only when the head repo is this repo; a fork head is checked as an outsider |
+| `unsafe` hidden behind `#[path]`, `include!`, renames or keyword-free attributes | Non-maintainer `.rs` changes are protected until Rust CI enforces `unsafe_code = "forbid"` from the protected root `Cargo.toml` (`[workspace.lints.rust]`); the gate's text scan (including removed `unsafe_code` lints) is a best-effort tripwire |
 | Maintainer account takeover | 2FA with passkey and recovery codes, secret scanning; residual risk accepted |
 | DCO is an attestation, not authentication | Residual risk accepted |
 

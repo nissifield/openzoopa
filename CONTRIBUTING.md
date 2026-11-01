@@ -8,12 +8,12 @@ The project is in phase 0. Most work is security-sensitive and done by the maint
 
 - Outside work starts from a **task card**: a `card:ready` issue written by someone listed in [MAINTAINERS.md](MAINTAINERS.md).
 - For anything else, open an issue or a Discussion first.
-- These are not offered as cards: crypto, the wire protocol (`proto/`), work that needs an RFC ([DESIGN.md §6.4](docs/DESIGN.md#64-governance-and-contribution)), the sensitive crates in [§6.3](docs/DESIGN.md#63-security-posture), crates allowed to use `unsafe`, new dependencies and `Cargo.*` changes, CI and the supply chain.
+- These are not offered as cards: crypto, the wire protocol (`proto/`), work that needs an RFC ([DESIGN.md §6.4](docs/DESIGN.md#64-governance-and-contribution)), the sensitive crates in [§6.3](docs/DESIGN.md#63-security-posture), crates allowed to use `unsafe`, new dependencies and `Cargo.*` changes, CI and the supply chain, and any `.rs` file until Rust CI enforces `unsafe_code = "forbid"`.
 - Changes to the §6.3 paths need two human maintainers. An agent approval never counts.
 
 ## The card flow
 
-No cards are published yet; the first ones follow the CI gate (forthcoming).
+No cards are published yet.
 
 1. Pick an open, unassigned `card:ready` issue and comment asking for it. A maintainer assigns it to you.
 2. Give the starter prompt below, the card URL and the card's **Prompt** to your AI tool, or do the card by hand.
@@ -54,7 +54,7 @@ By contributing, you certify the [DCO 1.1](https://developercertificate.org/).
 - A human authors and signs off. An AI or bot identity in `Signed-off-by` is rejected, for example `noreply@anthropic.com`, `[bot]@users.noreply.github.com` or `*@localhost`.
 - Every human `Co-authored-by` must also sign off.
 
-A required check will enforce this once the CI gate lands (forthcoming).
+The required `checks` gate enforces this.
 
 ## AI disclosure
 
