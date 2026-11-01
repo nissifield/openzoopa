@@ -11,7 +11,7 @@ Start with [docs/DESIGN.md](docs/DESIGN.md), [docs/design-v0.2-self-host-amendme
 Most phase-0 work is security-sensitive and done by the maintainer. Outside work starts from a task card ([the card flow](CONTRIBUTING.md#the-card-flow)).
 
 1. Pick an open, unassigned `card:ready` issue and ask for it.
-2. Give the starter prompt and the card's Prompt to your AI tool, or do it by hand.
+2. Give the starter prompt, [AGENTS.md](AGENTS.md) and the card's Prompt to your AI tool, or do it by hand.
 3. Open a PR with `Closes #N`, the Done-when output and signed-off commits. Disclose AI help with `Assisted-by:`.
 
 Crypto, wire-protocol and RFC work is not offered as cards. See [CONTRIBUTING.md](CONTRIBUTING.md). Report vulnerabilities through [SECURITY.md](SECURITY.md). Please follow the [Code of Conduct](CODE_OF_CONDUCT.md).

@@ -19,8 +19,8 @@ None yet. The project is in phase 0 (design and feasibility spikes) and has no r
 In scope:
 
 - the design documents in `docs/`;
-- the contribution and CI pipeline: `.github/`, the `tools/` and `tests/ci/` gate and [MAINTAINERS.md](MAINTAINERS.md);
-- the agent instruction files (`.claude/`, and the forthcoming `AGENTS.md` and `.agents/`) and the starter prompt in [CONTRIBUTING.md](CONTRIBUTING.md).
+- the contribution and CI pipeline: `.github/`, the `checks` gate and advisory review runner (`tools/`, `tests/ci/`, `tests/review/`) and [MAINTAINERS.md](MAINTAINERS.md);
+- the agent instruction files (`.claude/`, `AGENTS.md`, `.agents/`) and the starter prompt in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 Out of scope: bugs in upstream dependencies (for example quinn, rustls, aws-lc-rs) go to those projects, and GitHub platform bugs go to GitHub.
 
