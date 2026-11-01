@@ -17,3 +17,10 @@ Initial mapping from `docs/DESIGN.md` §5.2:
 If a future crate is not listed here, its `Cargo.toml` and file headers must state its license explicitly before it is committed.
 
 The `openzoopa` name and trademark policy remain open owner decisions. The license decision does not clear the name for release use.
+
+## Docs, tooling and third-party text
+
+- Docs, root Markdown files, repository tooling and CI (`*.md` at the root, `docs/`, `.github/`, `tools/`, `tests/ci/`, `tests/review/`, `.claude/`, `.agents/`, `AGENTS.md`) are Apache-2.0, except the ponytail-derived text and the Code of Conduct below.
+- Instruction text adapted from ponytail is MIT. See `third_party/ponytail/LICENSE` and `third_party/ponytail/SOURCE`.
+- `CODE_OF_CONDUCT.md` is the Contributor Covenant 2.1, licensed [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+- There is no `NOTICE` file.
