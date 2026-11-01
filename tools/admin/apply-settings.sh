@@ -74,7 +74,7 @@ policy=$(cat <<'JSON'
  "rules": [{"type": "restrict_action_events", "parameters": {"allowed_events": ["pull_request_target"]}}]}
 JSON
 )
-pid=$(gh api "repos/$R/actions/policies" --jq '(.policies? // .)[]|select(.name=="allow-checks-prt").id') ||
+pid=$(gh api --paginate "repos/$R/actions/policies" --jq '(.policies? // .)[]|select(.name=="allow-checks-prt").id') ||
   { echo "settings mismatch: $POLICY_FAIL" >&2; exit 1; }
 if [ -n "$pid" ]; then
   printf '%s' "$policy" | gh api -X PUT "repos/$R/actions/policies/$pid" --silent --input - ||
@@ -84,7 +84,7 @@ else
     { echo "settings mismatch: $POLICY_FAIL" >&2; exit 1; }
 fi
 expect "repos/$R/actions/policies" \
-  '[(.policies? // .)[]|select(.name=="allow-checks-prt" and .enforcement=="active" and any(.rules[]; .type=="restrict_action_events" and (.parameters.allowed_events|index("pull_request_target"))))]|length==1' \
+  '[(.policies? // .)[]|select(.name=="allow-checks-prt" and .enforcement=="active" and .conditions.workflow_path.include==[".github/workflows/checks.yml"] and any(.rules[]; .type=="restrict_action_events" and .parameters.allowed_events==["pull_request_target"]))]|length==1' \
   "$POLICY_FAIL"
 
 # Order matters: a required check that no workflow on main reports stays

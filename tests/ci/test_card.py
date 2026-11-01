@@ -95,6 +95,12 @@ Read AGENTS.md.
         self.assertEqual(c.allow, ["docs/**", "README.md"])
         self.assertEqual(c.deny, ["docs/private/**"])
 
+    def test_stray_deny_heading_does_not_hide_denylist(self):
+        # an empty "### Files you must not touch" earlier in the body must not drop the real one
+        body = "### Files you must not touch\n\n### Note\n\n" + BODY
+        c = card.parse_card(12, ["card:ready"], body)
+        self.assertEqual(c.deny, ["docs/private/**"])
+
 
 class ProtectedTests(unittest.TestCase):
     def test_protected(self):

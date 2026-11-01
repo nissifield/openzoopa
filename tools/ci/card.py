@@ -139,15 +139,18 @@ def is_sensitive(path: str) -> bool:
     return any(_codeowners_match(p, path) for p in SENSITIVE)
 
 
-def _section(body: str, title: str) -> list[str]:
+def _section(body: str, title: str, first_only: bool) -> list[str]:
+    # Allow lists use only the first matching heading, so a repeated heading
+    # cannot widen them; deny lists merge every match, so one cannot hide them.
     lines = []
-    in_section = False
+    in_section = seen = False
     for line in body.splitlines():
         stripped = line.strip()
         if stripped.startswith("###"):
-            if in_section:
-                break  # only the first matching heading counts
-            in_section = stripped == f"### {title}"
+            if in_section and first_only:
+                break
+            in_section = stripped == f"### {title}" and not (seen and first_only)
+            seen = seen or in_section
         elif in_section and stripped:
             # GitHub issue forms render an empty optional field as "_No response_".
             if stripped != "_No response_":
@@ -157,5 +160,5 @@ def _section(body: str, title: str) -> list[str]:
 
 def parse_card(number: int, labels: list[str], body: str) -> Card:
     return Card(number, list(labels),
-                _section(body, "Files you may touch"),
-                _section(body, "Files you must not touch"))
+                _section(body, "Files you may touch", True),
+                _section(body, "Files you must not touch", False))
