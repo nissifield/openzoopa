@@ -2,7 +2,7 @@
 
 An open-source, self-hosted Zero Trust Network Access (ZTNA) platform — an open alternative to Zscaler Private Access — written in Rust.
 
-> Status: founding design and phase-0 feasibility work in progress. Start with `docs/DESIGN.md`, `docs/design-v0.2-self-host-amendment.md`, and `docs/phase0-spike-001-verdict.md`.
+> Status: founding design and phase-0 feasibility work in progress. Start with `docs/DESIGN.md`, `docs/design-v0.2-self-host-amendment.md`, `docs/phase0-spike-001-verdict.md`, and `docs/phase0-spike-002-verdict.md`.
 
 ## Licensing
 

@@ -71,6 +71,8 @@ Only the `initial_dst_cid_provider` API claim was checked first-hand (on docs.rs
 
 No. §11 #1 and #2 block the *public repo and releases* (amendment §11 table), not private throwaway work. The spike answers §11 #9, which is the spike itself.
 
+> **Superseded (2026-11-01):** the "no license header, nothing published" advice below predates `LICENSING.md`. Spike crates now carry an explicit license (spike 002A: Apache-2.0) and are archived by public tag.
+
 Keep it outside the product tree, with no license header, nothing published, and no "openzoopa" artifacts. Clean-room from public docs only; quinn and rustls are MIT/Apache, so there's no conflict. Nothing in it is assumed to carry over into AGPL or Apache crates.
 
 Skipped/Not checked: I checked only the `initial_dst_cid_provider` API myself; every other upstream claim comes from the agent's fetches, with approximate line numbers. Not checked by anyone: the exact RFC 9000 §10.3 "MAY" wording, what `poll_recv` does with `Ok(0)` or GRO batches, how quinn handles an undecodable NEW_TOKEN, whether rustls offers X25519MLKEM768 by default, and the anti-amplification spike.
